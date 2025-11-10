@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """CLI utility for exploring large CSV files with quick Plotly charts."""
 
 from __future__ import annotations
