@@ -4,7 +4,7 @@
 sample rows, and generate interactive Plotly charts (line, bar, scatter, histogram) saved as a
 self-contained HTML file.
 
-You can also explore the same workflow in the browser via `app.py`, a Streamlit UI that wraps the
+You can also explore the same workflow in the browser via `streamlit_app.py`, a Streamlit UI that wraps the
 CLI logic.
 
 ## Setup
@@ -49,7 +49,7 @@ HTML, you can share or host the output without additional assets.
 To work in the browser instead of the CLI:
 
 ```bash
-streamlit run app.py
+streamlit run streamlit_app.py
 ```
 
 The sidebar lets you upload a CSV (or point to a path on disk), tweak sampling options, and choose
