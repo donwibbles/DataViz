@@ -53,4 +53,15 @@ streamlit run streamlit_app.py
 ```
 
 The sidebar lets you upload a CSV (or point to a path on disk), tweak sampling options, and choose
-chart settings. Once the chart renders you can download the standalone HTML straight from the app.
+chart settings. Use the **Filter rows** expander to constrain numeric ranges or pick categorical
+values (filters are applied after sampling). Once the chart renders you can download the standalone
+HTML straight from the app or explore the sampled data table.
+
+## Testing
+
+Lightweight pytest coverage ensures the sampling logic keeps working for both the CLI and the
+Streamlit UI:
+
+```bash
+python -m pytest
+```
