@@ -192,8 +192,8 @@ def search_bills(
         return []
 
     try:
-        # Build query using session_name
-        db_query = supabase.table('bills').select('*').eq('session_name', session)
+        # Build query using session_name, include authors
+        db_query = supabase.table('bills').select('*, bill_authors(legislator_id, legislators(name, is_committee))').eq('session_name', session)
 
         # Search by bill number or title
         if query:
@@ -211,11 +211,20 @@ def search_bills(
         # Convert to Bill objects
         bills = []
         for row in bills_data:
+            # Extract author names, filter out committees
+            authors = []
+            for author in row.get('bill_authors', []):
+                if author.get('legislators'):
+                    leg = author['legislators']
+                    # Only show actual legislators, not committees
+                    if not leg.get('is_committee', False):
+                        authors.append(leg['name'])
+
             bill = Bill(
                 id=row['id'],
                 bill_number=row['bill_number'],
                 title=row['title'],
-                authors=[],  # TODO: Join with bill_authors table
+                authors=authors,
                 session=row['session'],
                 status=row.get('status', 'Unknown'),
                 last_action=row.get('last_action', ''),
@@ -247,7 +256,7 @@ def fetch_bill_details(bill_id: str) -> Optional[Bill]:
     try:
         # Get bill with authors and vote counts
         response = supabase.table('bills') \
-            .select('*, bill_authors(legislator_id, legislators(name))') \
+            .select('*, bill_authors(legislator_id, legislators(name, is_committee))') \
             .eq('id', bill_id) \
             .single() \
             .execute()
@@ -256,14 +265,22 @@ def fetch_bill_details(bill_id: str) -> Optional[Bill]:
             return None
 
         row = response.data
-        authors = [a['legislators']['name'] for a in row.get('bill_authors', []) if a.get('legislators')]
+
+        # Extract author names, filter out committees
+        authors = []
+        for a in row.get('bill_authors', []):
+            if a.get('legislators'):
+                leg = a['legislators']
+                # Only show actual legislators, not committees
+                if not leg.get('is_committee', False):
+                    authors.append(leg['name'])
 
         bill = Bill(
             id=row['id'],
             bill_number=row['bill_number'],
             title=row['title'],
             authors=authors,
-            session=row['session'],
+            session=row.get('session_name') or row['session'],  # Prefer session_name
             status=row.get('status', 'Unknown'),
             last_action=row.get('last_action', ''),
             last_action_date=row.get('last_action_date', '')

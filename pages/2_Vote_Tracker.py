@@ -227,6 +227,53 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                         else:
                             st.warning("No bills found matching your search")
 
+                # Show selected bill details
+                if "selected_bill" in st.session_state and st.session_state.selected_bill:
+                    st.divider()
+
+                    from openstates import fetch_bill_details
+
+                    with st.spinner("Loading bill details..."):
+                        bill = fetch_bill_details(st.session_state.selected_bill)
+
+                    if bill:
+                        st.subheader(f"📜 {bill.bill_number}: {bill.title}")
+
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Session", bill.session)
+                        with col2:
+                            st.metric("Status", bill.status)
+                        with col3:
+                            if bill.last_action_date:
+                                st.metric("Last Action", bill.last_action_date)
+
+                        if bill.authors:
+                            st.markdown(f"**✍️ Authors:** {', '.join(bill.authors)}")
+
+                        if bill.last_action:
+                            st.markdown(f"**📋 Latest Action:** {bill.last_action}")
+
+                        # Show vote summary if available
+                        if hasattr(bill, 'ayes') or hasattr(bill, 'noes'):
+                            st.markdown("### Vote Summary")
+                            vote_col1, vote_col2, vote_col3 = st.columns(3)
+                            with vote_col1:
+                                st.metric("Ayes", getattr(bill, 'ayes', 0))
+                            with vote_col2:
+                                st.metric("Noes", getattr(bill, 'noes', 0))
+                            with vote_col3:
+                                st.metric("Abstain", getattr(bill, 'abstain', 0))
+
+                        if st.button("← Back to search"):
+                            del st.session_state.selected_bill
+                            st.rerun()
+                    else:
+                        st.error("Could not load bill details")
+                        if st.button("← Back to search"):
+                            del st.session_state.selected_bill
+                            st.rerun()
+
         except ImportError as e:
             st.error(f"Vote tracker module not found: {e}")
             st.info("The vote tracker feature requires the openstates module to be installed.")
