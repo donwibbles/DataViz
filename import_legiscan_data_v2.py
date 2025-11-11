@@ -81,7 +81,7 @@ def import_legislators(csv_path: str) -> int:
     return 0
 
 
-def import_bills(csv_path: str, session_id: str = "2172", session_name: str = None) -> int:
+def import_bills(csv_path: str, session_name: str = None) -> int:
     """Import bills from bills.csv"""
     print(f"📥 Importing bills from {csv_path}...")
 
@@ -99,7 +99,7 @@ def import_bills(csv_path: str, session_id: str = "2172", session_name: str = No
                 'id': row['bill_id'],
                 'bill_number': row['bill_number'],
                 'title': row.get('title') or row.get('description', ''),
-                'session': row.get('session_id', session_id),
+                'session': row['session_id'],  # Always from CSV
                 'session_name': session_name,
                 'status': row.get('status_desc', 'Unknown'),
                 'last_action': row.get('last_action', ''),
@@ -331,7 +331,7 @@ def import_bill_documents(csv_path: str) -> int:
     return 0
 
 
-def import_votes(votes_csv: str, rollcalls_csv: str, session_id: str = "2172") -> int:
+def import_votes(votes_csv: str, rollcalls_csv: str, bills_csv: str) -> int:
     """
     Import votes by joining votes.csv with rollcalls.csv
 
@@ -349,6 +349,18 @@ def import_votes(votes_csv: str, rollcalls_csv: str, session_id: str = "2172") -
     if not Path(rollcalls_csv).exists():
         print(f"❌ File not found: {rollcalls_csv}")
         return 0
+
+    if not Path(bills_csv).exists():
+        print(f"❌ File not found: {bills_csv}")
+        return 0
+
+    # Get session_id from bills.csv
+    print("  Getting session info from bills.csv...")
+    with open(bills_csv, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        first_bill = next(reader)
+        session_id = first_bill['session_id']
+    print(f"  Session ID: {session_id}")
 
     # First, load rollcalls into memory to create a lookup
     print("  Loading rollcalls data...")
@@ -452,41 +464,33 @@ def import_votes(votes_csv: str, rollcalls_csv: str, session_id: str = "2172") -
     return 0
 
 
-def main():
-    """Main import process."""
-    print("🚀 LegiScan Dataset Import to Supabase (v2)")
-    print("=" * 60)
-    print()
+def import_session(session_dir: Path):
+    """Import data for a single legislative session."""
+    csv_dir = session_dir / "csv"
 
-    # Path to extracted LegiScan CSV files
-    dataset_dir = Path("./legiscan_ca_data/CA/2025-2026_Regular_Session/csv")
-
-    if not dataset_dir.exists():
-        print(f"❌ Directory not found: {dataset_dir}")
-        print()
-        print("Please extract LegiScan dataset to: legiscan_ca_data/CA/[session]/csv/")
+    if not csv_dir.exists():
+        print(f"⚠️  CSV directory not found: {csv_dir}")
         return
-
-    # Get session info from the directory name
-    session_dir = dataset_dir.parent.name  # e.g., "2025-2026_Regular_Session"
-    session_id = "2172"  # Default for 2025-2026
 
     # Extract human-readable session name from directory
     # e.g., "2025-2026_Regular_Session" -> "2025-2026"
-    session_name = session_dir.split('_')[0] if '_' in session_dir else session_dir
+    session_name = session_dir.name.split('_')[0] if '_' in session_dir.name else session_dir.name
 
-    print(f"📁 Importing from: {dataset_dir}")
-    print(f"📅 Session: {session_name} (ID: {session_id})")
+    print()
+    print("=" * 60)
+    print(f"📅 IMPORTING SESSION: {session_name}")
+    print("=" * 60)
+    print(f"📁 From: {csv_dir}")
     print()
 
     # Import in correct order
-    people_file = dataset_dir / "people.csv"
-    bills_file = dataset_dir / "bills.csv"
-    sponsors_file = dataset_dir / "sponsors.csv"
-    rollcalls_file = dataset_dir / "rollcalls.csv"
-    votes_file = dataset_dir / "votes.csv"
-    history_file = dataset_dir / "history.csv"
-    documents_file = dataset_dir / "documents.csv"
+    people_file = csv_dir / "people.csv"
+    bills_file = csv_dir / "bills.csv"
+    sponsors_file = csv_dir / "sponsors.csv"
+    rollcalls_file = csv_dir / "rollcalls.csv"
+    votes_file = csv_dir / "votes.csv"
+    history_file = csv_dir / "history.csv"
+    documents_file = csv_dir / "documents.csv"
 
     # 1. Import legislators
     if people_file.exists():
@@ -498,7 +502,7 @@ def main():
 
     # 2. Import bills
     if bills_file.exists():
-        import_bills(str(bills_file), session_id, session_name)
+        import_bills(str(bills_file), session_name)
     else:
         print("⚠️  bills.csv not found")
 
@@ -520,14 +524,16 @@ def main():
 
     print()
 
-    # 5. Import votes (requires both votes.csv and rollcalls.csv)
-    if votes_file.exists() and rollcalls_file.exists():
-        import_votes(str(votes_file), str(rollcalls_file), session_id)
+    # 5. Import votes (requires votes.csv, rollcalls.csv, and bills.csv)
+    if votes_file.exists() and rollcalls_file.exists() and bills_file.exists():
+        import_votes(str(votes_file), str(rollcalls_file), str(bills_file))
     else:
         if not votes_file.exists():
             print("⚠️  votes.csv not found")
         if not rollcalls_file.exists():
             print("⚠️  rollcalls.csv not found")
+        if not bills_file.exists():
+            print("⚠️  bills.csv not found (needed for session info)")
 
     print()
 
@@ -546,8 +552,51 @@ def main():
         print("⚠️  documents.csv not found")
 
     print()
+    print(f"✅ Session {session_name} import complete!")
+
+
+def main():
+    """Main import process - imports all sessions."""
+    print("🚀 LegiScan Dataset Import to Supabase (v2)")
     print("=" * 60)
-    print("✅ Import complete!")
+    print("Importing ALL California legislative sessions")
+    print()
+
+    # Base directory containing all session folders
+    base_dir = Path("./legiscan_ca_data/CA")
+
+    if not base_dir.exists():
+        print(f"❌ Directory not found: {base_dir}")
+        print()
+        print("Please extract LegiScan datasets to: legiscan_ca_data/CA/")
+        return
+
+    # Get all session directories (sorted by name for chronological order)
+    session_dirs = sorted([d for d in base_dir.iterdir() if d.is_dir()])
+
+    if not session_dirs:
+        print(f"❌ No session directories found in {base_dir}")
+        return
+
+    print(f"Found {len(session_dirs)} sessions:")
+    for session_dir in session_dirs:
+        session_name = session_dir.name.split('_')[0] if '_' in session_dir.name else session_dir.name
+        print(f"  - {session_name}")
+    print()
+
+    # Import each session
+    for session_dir in session_dirs:
+        try:
+            import_session(session_dir)
+        except Exception as e:
+            print(f"❌ Error importing {session_dir.name}: {e}")
+            print("Continuing with next session...")
+            continue
+
+    print()
+    print("=" * 60)
+    print("✅ ALL SESSIONS IMPORT COMPLETE!")
+    print("=" * 60)
     print()
     print("Check your Supabase dashboard to verify:")
     print("  - legislators table")
@@ -557,6 +606,8 @@ def main():
     print("  - votes table")
     print("  - bill_history table")
     print("  - bill_documents table")
+    print()
+    print("You can now search bills by session (e.g., '2017-2018', '2025-2026')")
 
 
 if __name__ == "__main__":
