@@ -244,8 +244,8 @@ def import_bill_history(csv_path: str) -> int:
             history.append(action)
 
     if history:
-        # Import in chunks
-        chunk_size = 1000
+        # Import in smaller chunks to avoid SSL timeouts
+        chunk_size = 500  # Reduced from 1000
         total_imported = 0
 
         for i in range(0, len(history), chunk_size):
@@ -256,10 +256,11 @@ def import_bill_history(csv_path: str) -> int:
                     on_conflict='bill_id,action_date,sequence'
                 ).execute()
                 total_imported += len(chunk)
-                if total_imported % 10000 == 0 or total_imported == len(history):
+                if total_imported % 5000 == 0 or total_imported == len(history):
                     print(f"  Imported {total_imported}/{len(history)} history actions")
             except Exception as e:
                 print(f"❌ Error importing history chunk: {e}")
+                print(f"   Continuing with next chunk...")
 
         print(f"✅ Imported {total_imported} history actions total")
         return total_imported
@@ -294,8 +295,8 @@ def import_bill_documents(csv_path: str) -> int:
             documents.append(document)
 
     if documents:
-        # Import in chunks
-        chunk_size = 500
+        # Import in smaller chunks to avoid SSL timeouts
+        chunk_size = 250  # Reduced from 500
         total_imported = 0
 
         for i in range(0, len(documents), chunk_size):
@@ -303,10 +304,11 @@ def import_bill_documents(csv_path: str) -> int:
             try:
                 supabase.table('bill_documents').upsert(chunk).execute()
                 total_imported += len(chunk)
-                if total_imported % 5000 == 0 or total_imported == len(documents):
+                if total_imported % 2500 == 0 or total_imported == len(documents):
                     print(f"  Imported {total_imported}/{len(documents)} documents")
             except Exception as e:
                 print(f"❌ Error importing documents chunk: {e}")
+                print(f"   Continuing with next chunk...")
 
         print(f"✅ Imported {total_imported} documents total")
         return total_imported
@@ -395,21 +397,36 @@ def import_votes(votes_csv: str, rollcalls_csv: str, session_id: str = "2172") -
 
     print(f"  Processed {len(votes)} votes ({skipped} skipped due to missing rollcall)")
 
-    if votes:
+    # Deduplicate votes based on UNIQUE constraint (bill_id, legislator_id, vote_date, motion)
+    # LegiScan data can have duplicates within the same CSV
+    votes_dict = {}
+    for vote in votes:
+        key = (vote['bill_id'], vote['legislator_id'], vote['vote_date'], vote['motion'])
+        votes_dict[key] = vote  # Last occurrence wins
+
+    unique_votes = list(votes_dict.values())
+    duplicates_removed = len(votes) - len(unique_votes)
+
+    if duplicates_removed > 0:
+        print(f"  Removed {duplicates_removed} duplicate votes")
+
+    print(f"  Importing {len(unique_votes)} unique votes...")
+
+    if unique_votes:
         # Import in chunks
         chunk_size = 500
         total_imported = 0
 
-        for i in range(0, len(votes), chunk_size):
-            chunk = votes[i:i + chunk_size]
+        for i in range(0, len(unique_votes), chunk_size):
+            chunk = unique_votes[i:i + chunk_size]
             try:
                 supabase.table('votes').upsert(
                     chunk,
                     on_conflict='bill_id,legislator_id,vote_date,motion'
                 ).execute()
                 total_imported += len(chunk)
-                if total_imported % 5000 == 0 or total_imported == len(votes):
-                    print(f"  Imported {total_imported}/{len(votes)} votes")
+                if total_imported % 5000 == 0 or total_imported == len(unique_votes):
+                    print(f"  Imported {total_imported}/{len(unique_votes)} votes")
             except Exception as e:
                 print(f"❌ Error importing votes chunk: {e}")
                 print(f"   First vote in chunk: {chunk[0] if chunk else 'empty'}")
