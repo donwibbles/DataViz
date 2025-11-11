@@ -693,35 +693,39 @@ with st.sidebar:
         with st.expander("📋 Select Committee(s)", expanded=True):
             st.caption(f"{len(committees)} committees available")
 
+            # Initialize session state for checkboxes first
+            if "committee_selections" not in st.session_state:
+                st.session_state.committee_selections = {c: True for c in committees}
+
+            # Ensure all committees are in session state
+            for committee in committees:
+                if committee not in st.session_state.committee_selections:
+                    st.session_state.committee_selections[committee] = True
+
             # Add "Select All" / "Deselect All" buttons
             col1, col2 = st.columns(2)
             select_all = col1.button("Select All", key="select_all_committees")
             deselect_all = col2.button("Deselect All", key="deselect_all_committees")
 
-            # Initialize session state for checkboxes
-            if "committee_selections" not in st.session_state:
-                st.session_state.committee_selections = {c: True for c in committees}
-
             # Handle select/deselect all - update all and trigger rerun
             if select_all:
-                st.session_state.committee_selections = {c: True for c in committees}
+                for committee in committees:
+                    st.session_state.committee_selections[committee] = True
                 st.rerun()
             if deselect_all:
-                st.session_state.committee_selections = {c: False for c in committees}
+                for committee in committees:
+                    st.session_state.committee_selections[committee] = False
                 st.rerun()
 
             # Show checkboxes for each committee
             for committee in committees:
-                if committee not in st.session_state.committee_selections:
-                    st.session_state.committee_selections[committee] = False
-
                 # Checkbox updates session state on change
                 checked = st.checkbox(
                     committee,
                     value=st.session_state.committee_selections[committee],
                     key=f"committee_checkbox_{committee}"
                 )
-                # Update session state
+                # Update session state based on checkbox
                 st.session_state.committee_selections[committee] = checked
 
                 if checked:
