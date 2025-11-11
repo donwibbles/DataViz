@@ -91,60 +91,7 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                         key="vote_name_search"
                     )
 
-                if st.button("Search Legislators", type="primary", key="search_legislators_btn"):
-                    with st.spinner("Fetching California legislators..."):
-                        # Map chamber names to API values
-                        chamber_param = None
-                        if chamber_filter == "Senate":
-                            chamber_param = "upper"
-                        elif chamber_filter == "Assembly":
-                            chamber_param = "lower"
-
-                        # Map party names
-                        party_param = None
-                        if party_filter != "All":
-                            party_param = party_filter
-
-                        # Fetch legislators
-                        legislators = fetch_legislators(chamber=chamber_param, party=party_param)
-
-                        # Filter by name if provided
-                        if search_name:
-                            legislators = [
-                                leg for leg in legislators
-                                if search_name.lower() in leg.name.lower()
-                            ]
-
-                        # Display results
-                        if legislators:
-                            st.success(f"Found {len(legislators)} legislators")
-
-                            # Display as cards
-                            for legislator in legislators[:20]:  # Limit to 20
-                                with st.container():
-                                    col_a, col_b = st.columns([3, 1])
-
-                                    with col_a:
-                                        st.markdown(f"### {legislator.name}")
-                                        st.caption(f"{legislator.party} • {legislator.chamber} • District {legislator.district}")
-                                        if legislator.email:
-                                            st.caption(f"📧 {legislator.email}")
-
-                                    with col_b:
-                                        if st.button("View Votes", key=f"view_votes_{legislator.id}"):
-                                            st.session_state.selected_legislator = legislator.id
-                                            st.session_state.selected_legislator_name = legislator.name
-                                            st.rerun()
-
-                                    st.divider()
-
-                            if len(legislators) > 20:
-                                st.info(f"Showing first 20 of {len(legislators)} results. Refine your search to see more.")
-
-                        else:
-                            st.warning("No legislators found matching your criteria")
-
-                # Show selected legislator's votes
+                # Show selected legislator's votes (if one is selected)
                 if "selected_legislator" in st.session_state and st.session_state.selected_legislator:
                     st.divider()
                     st.subheader(f"📋 Voting Record: {st.session_state.selected_legislator_name}")
@@ -183,6 +130,67 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                     else:
                         st.warning(f"No votes found for {st.session_state.selected_legislator_name}")
                         st.info("This could mean the legislator hasn't voted on any bills in the database, or there may be a data issue.")
+
+                else:
+                    # Show search interface only if no legislator is selected
+                    if st.button("Search Legislators", type="primary", key="search_legislators_btn"):
+                        with st.spinner("Fetching California legislators..."):
+                            # Map chamber names to API values
+                            chamber_param = None
+                            if chamber_filter == "Senate":
+                                chamber_param = "upper"
+                            elif chamber_filter == "Assembly":
+                                chamber_param = "lower"
+
+                            # Map party names
+                            party_param = None
+                            if party_filter != "All":
+                                party_param = party_filter
+
+                            # Fetch legislators
+                            legislators = fetch_legislators(chamber=chamber_param, party=party_param)
+
+                            # Filter by name if provided
+                            if search_name:
+                                legislators = [
+                                    leg for leg in legislators
+                                    if search_name.lower() in leg.name.lower()
+                                ]
+
+                            # Store results in session state
+                            st.session_state.search_results = legislators
+
+                    # Display search results if available
+                    if "search_results" in st.session_state:
+                        legislators = st.session_state.search_results
+
+                        if legislators:
+                            st.success(f"Found {len(legislators)} legislators")
+
+                            # Display as cards
+                            for legislator in legislators[:20]:  # Limit to 20
+                                with st.container():
+                                    col_a, col_b = st.columns([3, 1])
+
+                                    with col_a:
+                                        st.markdown(f"### {legislator.name}")
+                                        st.caption(f"{legislator.party} • {legislator.chamber} • District {legislator.district}")
+                                        if legislator.email:
+                                            st.caption(f"📧 {legislator.email}")
+
+                                    with col_b:
+                                        if st.button("View Votes", key=f"view_votes_{legislator.id}"):
+                                            st.session_state.selected_legislator = legislator.id
+                                            st.session_state.selected_legislator_name = legislator.name
+                                            st.rerun()
+
+                                    st.divider()
+
+                            if len(legislators) > 20:
+                                st.info(f"Showing first 20 of {len(legislators)} results. Refine your search to see more.")
+
+                        else:
+                            st.warning("No legislators found matching your criteria")
 
             with tab2:
                 st.subheader("Search California Bills")
