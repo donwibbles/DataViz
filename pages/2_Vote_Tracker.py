@@ -158,11 +158,53 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                                 if filtered_authored:
                                     st.caption(f"Showing {len(filtered_authored)} of {len(authored_bills)} bills")
 
-                                    for bill in filtered_authored[:50]:  # Limit display
-                                        ag_icon = " 🌾" if hasattr(bill, 'is_agricultural') and bill.is_agricultural else ""
-                                        st.markdown(f"**{bill.bill_number}**{ag_icon} - {bill.title}")
-                                        st.caption(f"📅 {bill.session} • {bill.status}")
-                                        st.divider()
+                                    for i, bill in enumerate(filtered_authored[:50]):  # Limit display
+                                        with st.container():
+                                            ag_icon = " 🌾" if hasattr(bill, 'is_agricultural') and bill.is_agricultural else ""
+
+                                            # Clickable bill number
+                                            col_bill1, col_bill2 = st.columns([1, 5])
+                                            with col_bill1:
+                                                if st.button(bill.bill_number, key=f"authored_bill_{bill.id}_{i}", type="secondary"):
+                                                    expand_key = f"expand_authored_{bill.id}"
+                                                    if expand_key in st.session_state and st.session_state[expand_key]:
+                                                        st.session_state[expand_key] = False
+                                                    else:
+                                                        st.session_state[expand_key] = True
+                                                    st.rerun()
+                                            with col_bill2:
+                                                st.markdown(f"{ag_icon} {bill.title}")
+                                                st.caption(f"📅 {bill.session} • {bill.status}")
+
+                                            # Check if expanded
+                                            expand_key = f"expand_authored_{bill.id}"
+                                            if expand_key in st.session_state and st.session_state[expand_key]:
+                                                from openstates import fetch_bill_details
+
+                                                with st.spinner("Loading bill details..."):
+                                                    bill_details = fetch_bill_details(bill.id)
+
+                                                if bill_details:
+                                                    st.markdown("---")
+                                                    st.markdown(f"**Full Title:** {bill_details.title}")
+
+                                                    if bill_details.authors:
+                                                        st.caption(f"**✍️ Co-Authors:** {', '.join(bill_details.authors[:5])}")
+
+                                                    if bill_details.last_action:
+                                                        st.caption(f"**📋 Latest Action:** {bill_details.last_action}")
+
+                                                    if hasattr(bill_details, 'ayes') and bill_details.ayes > 0:
+                                                        vote_col1, vote_col2, vote_col3 = st.columns(3)
+                                                        with vote_col1:
+                                                            st.metric("Ayes", bill_details.ayes)
+                                                        with vote_col2:
+                                                            st.metric("Noes", bill_details.noes)
+                                                        with vote_col3:
+                                                            st.metric("Abstain", bill_details.abstain)
+                                                    st.markdown("---")
+
+                                            st.divider()
 
                                     if len(filtered_authored) > 50:
                                         st.info(f"Showing first 50 of {len(filtered_authored)} bills")
@@ -226,21 +268,85 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
 
                         st.success(f"Found {len(filtered_votes)} votes" + (f" (filtered from {len(votes)})" if vote_search else ""))
 
-                        # Create DataFrame with agricultural indicator
-                        vote_data = []
-                        for vote in filtered_votes:
-                            ag_icon = "🌾" if hasattr(vote, 'is_agricultural') and vote.is_agricultural else ""
-                            vote_data.append({
-                                "Bill": vote.bill_number,
-                                "Title": vote.bill_title[:60] + "..." if len(vote.bill_title) > 60 else vote.bill_title,
-                                "Vote": vote.vote_type,
-                                "Date": vote.vote_date,
-                                "Session": vote.session,
-                                "🌾": ag_icon
-                            })
+                        # Display votes with clickable bill numbers
+                        for i, vote in enumerate(filtered_votes):
+                            with st.container():
+                                # Main vote row
+                                col1, col2, col3, col4, col5, col6 = st.columns([1.2, 3, 0.8, 1, 1.2, 0.3])
 
-                        votes_df = pd.DataFrame(vote_data)
-                        st.dataframe(votes_df, use_container_width=True, hide_index=True)
+                                with col1:
+                                    # Clickable bill number
+                                    if st.button(vote.bill_number, key=f"bill_btn_{vote.bill_id}_{i}", type="secondary"):
+                                        # Toggle expansion
+                                        expand_key = f"expand_bill_{vote.bill_id}"
+                                        if expand_key in st.session_state and st.session_state[expand_key]:
+                                            st.session_state[expand_key] = False
+                                        else:
+                                            st.session_state[expand_key] = True
+                                        st.rerun()
+
+                                with col2:
+                                    title = vote.bill_title[:50] + "..." if len(vote.bill_title) > 50 else vote.bill_title
+                                    st.markdown(f"<small>{title}</small>", unsafe_allow_html=True)
+
+                                with col3:
+                                    vote_color = "🟢" if vote.vote_type.lower() == "yes" else "🔴" if vote.vote_type.lower() == "no" else "⚪"
+                                    st.markdown(f"{vote_color} {vote.vote_type}")
+
+                                with col4:
+                                    st.caption(vote.vote_date)
+
+                                with col5:
+                                    st.caption(vote.session)
+
+                                with col6:
+                                    if hasattr(vote, 'is_agricultural') and vote.is_agricultural:
+                                        st.markdown("🌾")
+
+                                # Check if this bill should be expanded
+                                expand_key = f"expand_bill_{vote.bill_id}"
+                                if expand_key in st.session_state and st.session_state[expand_key]:
+                                    # Fetch and display bill details
+                                    from openstates import fetch_bill_details
+
+                                    with st.spinner("Loading bill details..."):
+                                        bill_details = fetch_bill_details(vote.bill_id)
+
+                                    if bill_details:
+                                        st.markdown("---")
+
+                                        # Bill details section
+                                        detail_col1, detail_col2 = st.columns([3, 1])
+
+                                        with detail_col1:
+                                            st.markdown(f"**Full Title:** {bill_details.title}")
+
+                                            if bill_details.authors:
+                                                st.caption(f"**✍️ Authors:** {', '.join(bill_details.authors[:5])}")
+
+                                            if bill_details.last_action:
+                                                st.caption(f"**📋 Latest Action:** {bill_details.last_action}")
+
+                                        with detail_col2:
+                                            st.caption(f"**Status:** {bill_details.status}")
+                                            if bill_details.last_action_date:
+                                                st.caption(f"**Date:** {bill_details.last_action_date}")
+
+                                        # Vote breakdown if available
+                                        if hasattr(bill_details, 'ayes') and bill_details.ayes > 0:
+                                            vote_col1, vote_col2, vote_col3 = st.columns(3)
+                                            with vote_col1:
+                                                st.metric("Ayes", bill_details.ayes)
+                                            with vote_col2:
+                                                st.metric("Noes", bill_details.noes)
+                                            with vote_col3:
+                                                st.metric("Abstain", bill_details.abstain)
+
+                                        st.markdown("---")
+                                    else:
+                                        st.error("Could not load bill details")
+
+                                st.divider()
 
                         # Show "Load More" button if showing all sessions and there might be more
                         if session_param is None and len(votes) == 500:
