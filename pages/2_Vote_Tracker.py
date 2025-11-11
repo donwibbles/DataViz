@@ -123,16 +123,11 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                     # Stats Overview
                     if stats:
                         st.markdown("### Quick Stats")
-                        col1, col2, col3, col4 = st.columns(4)
+                        col1, col2 = st.columns(2)
                         with col1:
                             st.metric("📝 Bills Authored", stats.get('authored', 0))
                         with col2:
                             st.metric("🗳️ Total Votes", stats.get('votes', 0))
-                        with col3:
-                            st.metric("🌾 Ag Bill Votes", stats.get('ag_votes', 0))
-                        with col4:
-                            ag_pct = (stats.get('ag_votes', 0) / stats.get('votes', 1) * 100) if stats.get('votes', 0) > 0 else 0
-                            st.metric("🌾 Ag Vote %", f"{ag_pct:.1f}%")
 
                         st.divider()
 
@@ -160,8 +155,6 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
 
                                     for i, bill in enumerate(filtered_authored[:50]):  # Limit display
                                         with st.container():
-                                            ag_icon = " 🌾" if hasattr(bill, 'is_agricultural') and bill.is_agricultural else ""
-
                                             # Clickable bill number
                                             col_bill1, col_bill2 = st.columns([1, 5])
                                             with col_bill1:
@@ -173,7 +166,7 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                                                         st.session_state[expand_key] = True
                                                     st.rerun()
                                             with col_bill2:
-                                                st.markdown(f"{ag_icon} {bill.title}")
+                                                st.markdown(f"{bill.title}")
                                                 st.caption(f"📅 {bill.session} • {bill.status}")
 
                                             # Check if expanded
@@ -272,7 +265,7 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                         for i, vote in enumerate(filtered_votes):
                             with st.container():
                                 # Main vote row
-                                col1, col2, col3, col4, col5, col6 = st.columns([1.2, 3, 0.8, 1, 1.2, 0.3])
+                                col1, col2, col3, col4, col5 = st.columns([1.2, 3, 0.8, 1, 1.2])
 
                                 with col1:
                                     # Clickable bill number
@@ -298,10 +291,6 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
 
                                 with col5:
                                     st.caption(vote.session)
-
-                                with col6:
-                                    if hasattr(vote, 'is_agricultural') and vote.is_agricultural:
-                                        st.markdown("🌾")
 
                                 # Check if this bill should be expanded
                                 expand_key = f"expand_bill_{vote.bill_id}"
