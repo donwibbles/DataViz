@@ -19,9 +19,13 @@ CREATE TABLE IF NOT EXISTS legislators (
     phone TEXT,
     website TEXT,
     image_url TEXT,
+    is_committee BOOLEAN DEFAULT false, -- True if this is a committee, not a person
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Add is_committee column if it doesn't exist (for existing databases)
+ALTER TABLE legislators ADD COLUMN IF NOT EXISTS is_committee BOOLEAN DEFAULT false;
 
 -- Bills table
 CREATE TABLE IF NOT EXISTS bills (
@@ -112,6 +116,7 @@ CREATE TABLE IF NOT EXISTS bill_documents (
 CREATE INDEX IF NOT EXISTS idx_legislators_name ON legislators(name);
 CREATE INDEX IF NOT EXISTS idx_legislators_chamber ON legislators(chamber);
 CREATE INDEX IF NOT EXISTS idx_legislators_party ON legislators(party);
+CREATE INDEX IF NOT EXISTS idx_legislators_is_committee ON legislators(is_committee);
 
 CREATE INDEX IF NOT EXISTS idx_bills_number ON bills(bill_number);
 CREATE INDEX IF NOT EXISTS idx_bills_session ON bills(session);

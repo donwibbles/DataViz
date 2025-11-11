@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Run this in your Supabase SQL Editor to create the tables
 
--- Legislators table
+-- Legislators table (includes both legislators and committees)
 CREATE TABLE IF NOT EXISTS legislators (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS legislators (
     phone TEXT,
     website TEXT,
     image_url TEXT,
+    is_committee BOOLEAN DEFAULT false, -- True if this is a committee, not a person
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

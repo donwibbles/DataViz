@@ -43,9 +43,8 @@ def import_legislators(csv_path: str) -> int:
         reader = csv.DictReader(f)
 
         for row in reader:
-            # Skip committee entries (committee_id != 0)
-            if row.get('committee_id') and row.get('committee_id') != '0':
-                continue
+            # Check if this is a committee (committee_id != 0)
+            is_committee = row.get('committee_id') and row.get('committee_id') != '0'
 
             # Map chamber: role can be "Sen" or "Asm" for CA
             role = row.get('role', '')
@@ -64,7 +63,8 @@ def import_legislators(csv_path: str) -> int:
                 'district': row.get('district', 'Unknown'),
                 'email': None,  # Not in LegiScan data
                 'phone': None,  # Not in LegiScan data
-                'website': None  # Not in LegiScan data
+                'website': None,  # Not in LegiScan data
+                'is_committee': is_committee
             }
 
             legislators.append(legislator)
