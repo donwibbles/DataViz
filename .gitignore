@@ -41,6 +41,7 @@ htmlcov/
 
 # Streamlit
 .streamlit/secrets.toml
+.streamlit/pages/
 
 # Data files (optional - uncomment if you don't want to commit CSVs)
 # *.csv
