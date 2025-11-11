@@ -115,15 +115,42 @@ with st.sidebar:
     st.divider()
     st.header("🔍 Filters")
 
-    # Committee filter (multi-select)
+    # Committee filter (checkboxes)
     selected_committees = []
     if "Recipient Committee" in df_full.columns:
         committees = sorted(df_full["Recipient Committee"].dropna().unique().tolist())
-        selected_committees = st.multiselect(
-            "Select Committee(s)",
-            options=committees,
-            help="Leave empty to show all committees"
-        )
+
+        with st.expander("📋 Select Committee(s)", expanded=True):
+            st.caption(f"{len(committees)} committees available")
+
+            # Add "Select All" / "Deselect All" buttons
+            col1, col2 = st.columns(2)
+            select_all = col1.button("Select All", key="select_all_committees")
+            deselect_all = col2.button("Deselect All", key="deselect_all_committees")
+
+            # Initialize session state for checkboxes
+            if "committee_selections" not in st.session_state:
+                st.session_state.committee_selections = {}
+
+            # Handle select/deselect all
+            if select_all:
+                for committee in committees:
+                    st.session_state.committee_selections[committee] = True
+            if deselect_all:
+                for committee in committees:
+                    st.session_state.committee_selections[committee] = False
+
+            # Show checkboxes for each committee
+            for committee in committees:
+                if committee not in st.session_state.committee_selections:
+                    st.session_state.committee_selections[committee] = False
+
+                if st.checkbox(
+                    committee,
+                    value=st.session_state.committee_selections[committee],
+                    key=f"committee_{committee}"
+                ):
+                    selected_committees.append(committee)
 
     # Date range filter
     date_min, date_max = None, None
@@ -146,9 +173,9 @@ with st.sidebar:
     # Amount range filter
     amount_min, amount_max = None, None
     if "Amount" in df_full.columns:
-        valid_amounts = df_full["Amount"].dropna()
+        valid_amounts = df_full[df_full["Amount"] >= 0]["Amount"].dropna()
         if len(valid_amounts) > 0:
-            min_amt = float(valid_amounts.min())
+            min_amt = max(0.0, float(valid_amounts.min()))
             max_amt = float(valid_amounts.max())
 
             amount_range = st.slider(
@@ -326,76 +353,341 @@ if "Amount" in df.columns:
 # =============================================================================
 st.header("🗺️ Geographic Distribution")
 
-if "Contributor State" in df.columns and "Amount" in df.columns:
+# Simple geocoding dictionary for common cities (lat, lon)
+CITY_COORDS = {
+    # California cities
+    "Los Angeles, CA": (34.0522, -118.2437),
+    "San Francisco, CA": (37.7749, -122.4194),
+    "San Diego, CA": (32.7157, -117.1611),
+    "San Jose, CA": (37.3382, -121.8863),
+    "Sacramento, CA": (38.5816, -121.4944),
+    "Oakland, CA": (37.8044, -122.2712),
+    "Fresno, CA": (36.7378, -119.7871),
+    "Long Beach, CA": (33.7701, -118.1937),
+    "Bakersfield, CA": (35.3733, -119.0187),
+    "Anaheim, CA": (33.8366, -117.9143),
+    "Santa Ana, CA": (33.7455, -117.8677),
+    "Riverside, CA": (33.9533, -117.3962),
+    "Stockton, CA": (37.9577, -121.2908),
+    "Irvine, CA": (33.6846, -117.8265),
+    "Chula Vista, CA": (32.6401, -117.0842),
+    "Fremont, CA": (37.5485, -121.9886),
+    "San Bernardino, CA": (34.1083, -117.2898),
+    "Modesto, CA": (37.6391, -120.9969),
+    "Fontana, CA": (34.0922, -117.4350),
+    "Oxnard, CA": (34.1975, -119.1771),
+    "Moreno Valley, CA": (33.9425, -117.2297),
+    "Huntington Beach, CA": (33.6603, -117.9992),
+    "Glendale, CA": (34.1425, -118.2551),
+    "Santa Clarita, CA": (34.3917, -118.5426),
+    "Garden Grove, CA": (33.7746, -117.9415),
+    "Oceanside, CA": (33.1959, -117.3795),
+    "Rancho Cucamonga, CA": (34.1064, -117.5931),
+    "Ontario, CA": (34.0633, -117.6509),
+    "Lancaster, CA": (34.6868, -118.1542),
+    "Elk Grove, CA": (38.4088, -121.3716),
+    "Palmdale, CA": (34.5794, -118.1165),
+    "Corona, CA": (33.8753, -117.5664),
+    "Salinas, CA": (36.6777, -121.6555),
+    "Pomona, CA": (34.0551, -117.7500),
+    "Hayward, CA": (37.6688, -122.0808),
+    "Escondido, CA": (33.1192, -117.0864),
+    "Torrance, CA": (33.8358, -118.3406),
+    "Sunnyvale, CA": (37.3688, -122.0363),
+    "Orange, CA": (33.7879, -117.8531),
+    "Fullerton, CA": (33.8704, -117.9242),
+    "Pasadena, CA": (34.1478, -118.1445),
+    "Thousand Oaks, CA": (34.1706, -118.8376),
+    "Visalia, CA": (36.3302, -119.2921),
+    "Simi Valley, CA": (34.2694, -118.7815),
+    "Concord, CA": (37.9780, -122.0311),
+    "Roseville, CA": (38.7521, -121.2880),
+    "Santa Rosa, CA": (38.4404, -122.7141),
+    "Victorville, CA": (34.5362, -117.2928),
+    "Vallejo, CA": (38.1041, -122.2566),
+    "Berkeley, CA": (37.8715, -122.2730),
+    "El Monte, CA": (34.0686, -118.0276),
+    "Downey, CA": (33.9401, -118.1332),
+    "Costa Mesa, CA": (33.6411, -117.9187),
+    "Inglewood, CA": (33.9617, -118.3531),
+    "Carlsbad, CA": (33.1581, -117.3506),
+    "San Buenaventura, CA": (34.2746, -119.2290),
+    "Fairfield, CA": (38.2494, -122.0400),
+    "West Covina, CA": (34.0686, -117.9390),
+    "Murrieta, CA": (33.5539, -117.2139),
+    "Richmond, CA": (37.9358, -122.3477),
+    "Norwalk, CA": (33.9022, -118.0817),
+    "Antioch, CA": (38.0049, -121.8058),
+    "Temecula, CA": (33.4936, -117.1484),
+    "Burbank, CA": (34.1808, -118.3090),
+    "Daly City, CA": (37.6879, -122.4702),
+    "Rialto, CA": (34.1064, -117.3703),
+    "Santa Maria, CA": (34.9530, -120.4357),
+    "El Cajon, CA": (32.7948, -116.9625),
+    "San Mateo, CA": (37.5630, -122.3255),
+    "Clovis, CA": (36.8252, -119.7029),
+    "Compton, CA": (33.8958, -118.2201),
+    "Jurupa Valley, CA": (33.9971, -117.4854),
+    "Vista, CA": (33.2000, -117.2425),
+    "South Gate, CA": (33.9548, -118.2120),
+    "Mission Viejo, CA": (33.6000, -117.6720),
+    "Vacaville, CA": (38.3566, -121.9877),
+    "Carson, CA": (33.8314, -118.2820),
+    "Hesperia, CA": (34.4264, -117.3009),
+    "Santa Monica, CA": (34.0195, -118.4912),
+    "Westminster, CA": (33.7513, -117.9940),
+    "Redding, CA": (40.5865, -122.3917),
+    "Santa Barbara, CA": (34.4208, -119.6982),
+    "Chico, CA": (39.7285, -121.8375),
+    "Newport Beach, CA": (33.6189, -117.9289),
+    "San Leandro, CA": (37.7249, -122.1561),
+    "San Marcos, CA": (33.1434, -117.1661),
+    "Whittier, CA": (33.9792, -118.0328),
+    "Hawthorne, CA": (33.9164, -118.3526),
+    "Citrus Heights, CA": (38.7071, -121.2811),
+    "Tracy, CA": (37.7397, -121.4252),
+    "Alhambra, CA": (34.0953, -118.1270),
+    "Livermore, CA": (37.6819, -121.7680),
+    "Buena Park, CA": (33.8675, -117.9981),
+    "Menifee, CA": (33.6803, -117.1859),
+    "Hemet, CA": (33.7475, -116.9719),
+    "Lakewood, CA": (33.8536, -118.1339),
+    "Merced, CA": (37.3022, -120.4830),
+    "Chino, CA": (34.0122, -117.6889),
+    "Indio, CA": (33.7206, -116.2156),
+    "Redwood City, CA": (37.4852, -122.2364),
+    "Lake Forest, CA": (33.6469, -117.6892),
+    "Napa, CA": (38.2975, -122.2869),
+    "Tustin, CA": (33.7458, -117.8261),
+    "Bellflower, CA": (33.8817, -118.1170),
+    "Mountain View, CA": (37.3861, -122.0839),
+    "Chino Hills, CA": (33.9898, -117.7320),
+    "Baldwin Park, CA": (34.0853, -117.9609),
+    "Alameda, CA": (37.7652, -122.2416),
+    "Upland, CA": (34.0975, -117.6484),
+    "San Ramon, CA": (37.7799, -121.9780),
+    "Folsom, CA": (38.6779, -121.1760),
+    "Pleasanton, CA": (37.6624, -121.8747),
+    "Union City, CA": (37.5933, -122.0438),
+    "Perris, CA": (33.7825, -117.2286),
+    "Manteca, CA": (37.7974, -121.2161),
+    "Lynwood, CA": (33.9303, -118.2115),
+    "Apple Valley, CA": (34.5008, -117.1859),
+    "Redlands, CA": (34.0556, -117.1825),
+    "Turlock, CA": (37.4947, -120.8466),
+    "Milpitas, CA": (37.4283, -121.9066),
+    "Redondo Beach, CA": (33.8492, -118.3884),
+    "Rancho Cordova, CA": (38.5891, -121.3027),
+    "Yorba Linda, CA": (33.8886, -117.8131),
+    "Palo Alto, CA": (37.4419, -122.1430),
+    "Davis, CA": (38.5449, -121.7405),
+    "Camarillo, CA": (34.2164, -119.0376),
+    "Walnut Creek, CA": (37.9101, -122.0652),
+    "Pittsburg, CA": (38.0280, -121.8847),
+    "South San Francisco, CA": (37.6547, -122.4077),
+    "Yuba City, CA": (39.1404, -121.6169),
+    "San Clemente, CA": (33.4270, -117.6120),
+    "Laguna Niguel, CA": (33.5225, -117.7076),
+    "Pico Rivera, CA": (33.9830, -118.0967),
+    "Montebello, CA": (34.0165, -118.1137),
+    "Lodi, CA": (38.1302, -121.2725),
+    "Madera, CA": (36.9613, -120.0607),
+    "Santa Cruz, CA": (36.9741, -122.0308),
+    "La Habra, CA": (33.9319, -117.9462),
+    "Encinitas, CA": (33.0370, -117.2920),
+    "Monterey Park, CA": (34.0625, -118.1228),
+    "Tulare, CA": (36.2077, -119.3473),
+    "Cupertino, CA": (37.3230, -122.0322),
+    # Major US cities
+    "New York, NY": (40.7128, -74.0060),
+    "Chicago, IL": (41.8781, -87.6298),
+    "Houston, TX": (29.7604, -95.3698),
+    "Phoenix, AZ": (33.4484, -112.0740),
+    "Philadelphia, PA": (39.9526, -75.1652),
+    "San Antonio, TX": (29.4241, -98.4936),
+    "Dallas, TX": (32.7767, -96.7970),
+    "Austin, TX": (30.2672, -97.7431),
+    "Jacksonville, FL": (30.3322, -81.6557),
+    "Fort Worth, TX": (32.7555, -97.3308),
+    "Columbus, OH": (39.9612, -82.9988),
+    "Charlotte, NC": (35.2271, -80.8431),
+    "Indianapolis, IN": (39.7684, -86.1581),
+    "Seattle, WA": (47.6062, -122.3321),
+    "Denver, CO": (39.7392, -104.9903),
+    "Washington, DC": (38.9072, -77.0369),
+    "Boston, MA": (42.3601, -71.0589),
+    "El Paso, TX": (31.7619, -106.4850),
+    "Nashville, TN": (36.1627, -86.7816),
+    "Detroit, MI": (42.3314, -83.0458),
+    "Oklahoma City, OK": (35.4676, -97.5164),
+    "Portland, OR": (45.5152, -122.6784),
+    "Las Vegas, NV": (36.1699, -115.1398),
+    "Memphis, TN": (35.1495, -90.0490),
+    "Louisville, KY": (38.2527, -85.7585),
+    "Baltimore, MD": (39.2904, -76.6122),
+    "Milwaukee, WI": (43.0389, -87.9065),
+    "Albuquerque, NM": (35.0844, -106.6504),
+    "Tucson, AZ": (32.2226, -110.9747),
+    "Mesa, AZ": (33.4152, -111.8315),
+    "Kansas City, MO": (39.0997, -94.5786),
+    "Atlanta, GA": (33.7490, -84.3880),
+    "Miami, FL": (25.7617, -80.1918),
+    "Raleigh, NC": (35.7796, -78.6382),
+    "Omaha, NE": (41.2565, -95.9345),
+    "Minneapolis, MN": (44.9778, -93.2650),
+    "Tulsa, OK": (36.1540, -95.9928),
+    "Cleveland, OH": (41.4993, -81.6944),
+    "Wichita, KS": (37.6872, -97.3301),
+    "Arlington, TX": (32.7357, -97.1081),
+    "Tampa, FL": (27.9506, -82.4572),
+    "New Orleans, LA": (29.9511, -90.0715),
+    "Honolulu, HI": (21.3099, -157.8581),
+    "Anaheim, CA": (33.8366, -117.9143),
+    "St. Louis, MO": (38.6270, -90.1994),
+    "Pittsburgh, PA": (40.4406, -79.9959),
+    "Cincinnati, OH": (39.1031, -84.5120),
+    "Greensboro, NC": (36.0726, -79.7920),
+    "Newark, NJ": (40.7357, -74.1724),
+    "Plano, TX": (33.0198, -96.6989),
+    "Henderson, NV": (36.0395, -114.9817),
+    "Lincoln, NE": (40.8136, -96.7026),
+    "Orlando, FL": (28.5383, -81.3792),
+    "Jersey City, NJ": (40.7178, -74.0431),
+    "Chandler, AZ": (33.3062, -111.8413),
+    "Buffalo, NY": (42.8864, -78.8784),
+    "Durham, NC": (35.9940, -78.8986),
+    "St. Paul, MN": (44.9537, -93.0900),
+    "Madison, WI": (43.0731, -89.4012),
+    "Lubbock, TX": (33.5779, -101.8552),
+    "Scottsdale, AZ": (33.4942, -111.9261),
+    "Reno, NV": (39.5296, -119.8138),
+    "Virginia Beach, VA": (36.8529, -75.9780),
+}
 
-    # US State Map
-    st.subheader("United States Contribution Map")
 
-    state_data = (
-        df.groupby("Contributor State")
+def get_city_coords(city: str, state: str) -> tuple:
+    """Get coordinates for a city, with fallback to state center."""
+    key = f"{city}, {state}"
+    if key in CITY_COORDS:
+        return CITY_COORDS[key]
+    # Return None if not found, we'll filter these out
+    return None
+
+
+if "Contributor City" in df.columns and "Contributor State" in df.columns and "Amount" in df.columns:
+
+    # US Map - City-level scatter points
+    st.subheader("United States Contribution Map (by City)")
+
+    city_state_data = (
+        df.groupby(["Contributor City", "Contributor State"])
         .agg({
             "Amount": "sum",
             "Contributor Name": "nunique"
         })
         .reset_index()
+        .sort_values("Amount", ascending=False)
+        .head(100)  # Top 100 cities
     )
-    state_data.columns = ["State", "Total Amount", "Unique Donors"]
 
-    fig = px.choropleth(
-        state_data,
-        locations="State",
-        locationmode="USA-states",
-        color="Total Amount",
-        hover_name="State",
-        hover_data={"Total Amount": ":$,.2f", "Unique Donors": ":,"},
-        scope="usa",
-        title="Contributions by State",
-        color_continuous_scale="Blues"
+    # Add coordinates
+    city_state_data["coords"] = city_state_data.apply(
+        lambda row: get_city_coords(row["Contributor City"], row["Contributor State"]),
+        axis=1
     )
-    fig.update_layout(height=500)
-    create_downloadable_chart(fig, "us_contribution_map")
+
+    # Filter out cities without coordinates
+    city_state_data = city_state_data[city_state_data["coords"].notna()].copy()
+    city_state_data[["lat", "lon"]] = pd.DataFrame(
+        city_state_data["coords"].tolist(),
+        index=city_state_data.index
+    )
+    city_state_data["City, State"] = city_state_data["Contributor City"] + ", " + city_state_data["Contributor State"]
+
+    if len(city_state_data) > 0:
+        fig = px.scatter_geo(
+            city_state_data,
+            lat="lat",
+            lon="lon",
+            size="Amount",
+            hover_name="City, State",
+            hover_data={
+                "Amount": ":$,.2f",
+                "Contributor Name": ":,",
+                "lat": False,
+                "lon": False
+            },
+            labels={"Contributor Name": "Unique Donors"},
+            title=f"Top {len(city_state_data)} US Cities by Contribution Amount",
+            scope="usa",
+            size_max=40
+        )
+        fig.update_layout(height=600, geo=dict(projection_type="albers usa"))
+        create_downloadable_chart(fig, "us_city_contribution_map")
+    else:
+        st.warning("No city data with known coordinates found for mapping")
 
     # California Map (if CA data exists)
     ca_data = df[df["Contributor State"] == "CA"]
     if len(ca_data) > 0 and "Contributor City" in df.columns:
-        st.subheader("California Contribution Map")
+        st.subheader("California Contribution Map (by City)")
 
         ca_city_data = (
             ca_data.groupby("Contributor City")
             .agg({
                 "Amount": "sum",
-                "Contributor Name": "count"
+                "Contributor Name": "nunique"
             })
             .reset_index()
+            .sort_values("Amount", ascending=False)
+            .head(50)  # Top 50 CA cities
         )
-        ca_city_data.columns = ["City", "Total Amount", "Number of Contributions"]
-        ca_city_data = ca_city_data.sort_values("Total Amount", ascending=False).head(30)
 
-        # For better visualization, create a scatter geo map
-        fig = px.scatter_geo(
-            ca_city_data,
-            locations=["CA"] * len(ca_city_data),
-            locationmode="USA-states",
-            size="Total Amount",
-            hover_name="City",
-            hover_data={"Total Amount": ":$,.2f", "Number of Contributions": ":,"},
-            title="Top 30 California Cities by Contribution Amount",
-            scope="usa",
-            size_max=50
+        # Add coordinates for CA cities
+        ca_city_data["coords"] = ca_city_data["Contributor City"].apply(
+            lambda city: get_city_coords(city, "CA")
         )
-        fig.update_geos(
-            center=dict(lat=37, lon=-119),
-            projection_scale=5
+
+        # Filter out cities without coordinates
+        ca_city_data = ca_city_data[ca_city_data["coords"].notna()].copy()
+        ca_city_data[["lat", "lon"]] = pd.DataFrame(
+            ca_city_data["coords"].tolist(),
+            index=ca_city_data.index
         )
-        fig.update_layout(height=600)
-        create_downloadable_chart(fig, "california_contribution_map")
+
+        if len(ca_city_data) > 0:
+            fig = px.scatter_geo(
+                ca_city_data,
+                lat="lat",
+                lon="lon",
+                size="Amount",
+                hover_name="Contributor City",
+                hover_data={
+                    "Amount": ":$,.2f",
+                    "Contributor Name": ":,",
+                    "lat": False,
+                    "lon": False
+                },
+                labels={"Contributor Name": "Unique Donors"},
+                title=f"Top {len(ca_city_data)} California Cities by Contribution Amount",
+                scope="usa",
+                size_max=50
+            )
+            fig.update_geos(
+                center=dict(lat=37, lon=-119),
+                projection_scale=6
+            )
+            fig.update_layout(height=600)
+            create_downloadable_chart(fig, "california_city_contribution_map")
+        else:
+            st.warning("No California city data with known coordinates found for mapping")
 
         # Also show bar chart for CA cities
         st.subheader("Top California Cities")
         fig = px.bar(
             ca_city_data.head(15),
-            x="Total Amount",
-            y="City",
+            x="Amount",
+            y="Contributor City",
             orientation="h",
             title="Top 15 California Cities by Contribution Amount"
         )
