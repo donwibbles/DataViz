@@ -227,7 +227,7 @@ with st.sidebar:
     if "Amount" in df_full.columns:
         valid_amounts = df_full[df_full["Amount"] >= 0]["Amount"].dropna()
         if len(valid_amounts) > 0:
-            min_amt = max(0.0, float(valid_amounts.min()))
+            min_amt = 0.0  # Always start at 0
             max_amt = float(valid_amounts.max())
 
             amount_range = st.slider(
@@ -235,7 +235,8 @@ with st.sidebar:
                 min_value=min_amt,
                 max_value=max_amt,
                 value=(min_amt, max_amt),
-                help="Filter by contribution amount"
+                help="Filter by contribution amount",
+                format="$%.0f"  # Show as whole dollars
             )
             amount_min, amount_max = amount_range
 
@@ -957,8 +958,10 @@ with col2:
 # =============================================================================
 # DATA EXPORT
 # =============================================================================
-st.header("📥 Export Data")
+st.header("📥 Export & Reports")
 
+# CSV Exports
+st.subheader("📄 CSV Exports")
 col1, col2 = st.columns(2)
 
 with col1:
@@ -998,4 +1001,31 @@ with col2:
     )
 
 st.divider()
-st.caption("💡 Tip: Use the camera icon in the top-right of any chart to download it as a PNG image")
+
+# PDF Report (Coming Soon)
+st.subheader("📑 Custom PDF Report")
+with st.expander("🎨 Select Charts for PDF Report", expanded=False):
+    st.info("💡 **Coming Soon**: Select which charts to include in a custom PDF report")
+
+    st.write("**Available Charts:**")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.checkbox("✅ Committee Breakdown", value=True, disabled=True, key="pdf_committee")
+        st.checkbox("✅ Amount Distribution", value=True, disabled=True, key="pdf_amount")
+        st.checkbox("✅ US Map", value=True, disabled=True, key="pdf_us_map")
+
+    with col2:
+        st.checkbox("✅ California Map", value=True, disabled=True, key="pdf_ca_map")
+        st.checkbox("✅ Top Cities", value=True, disabled=True, key="pdf_cities")
+        st.checkbox("✅ Top States", value=True, disabled=True, key="pdf_states")
+
+    with col3:
+        st.checkbox("✅ Time Series", value=True, disabled=True, key="pdf_time")
+        st.checkbox("✅ Top Contributors", value=True, disabled=True, key="pdf_contributors")
+        st.checkbox("✅ Occupations", value=True, disabled=True, key="pdf_occupations")
+
+    st.caption("⚠️ PDF generation with embedded charts requires additional setup. For now, use the camera icon on each chart to download individual PNGs.")
+
+st.divider()
+st.caption("💡 **Tip**: Use the camera icon in the top-right of any chart to download it as a PNG image")
