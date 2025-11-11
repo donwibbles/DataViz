@@ -39,19 +39,115 @@ def _persist_uploaded_file(uploaded_file: UploadedFile) -> Optional[Path]:
     return temp_path
 
 
-@st.cache_data(show_spinner=False)
-def load_contribution_data(path_str: str, max_rows: Optional[int] = None) -> pd.DataFrame:
-    """Load contribution CSV and parse dates."""
-    df = pd.read_csv(path_str, nrows=max_rows, low_memory=False)
+def get_expected_columns():
+    """Define expected columns with keywords for auto-detection."""
+    return {
+        "Amount": {
+            "required": True,
+            "keywords": ["amount", "donation", "contribution", "total", "sum"],
+            "description": "Contribution amount (numeric)"
+        },
+        "Start Date": {
+            "required": True,
+            "keywords": ["date", "start", "received", "transaction", "contrib"],
+            "description": "Contribution date"
+        },
+        "Recipient Committee": {
+            "required": False,
+            "keywords": ["committee", "recipient", "candidate", "committee name", "payee"],
+            "description": "Committee or candidate receiving contribution"
+        },
+        "Contributor Name": {
+            "required": True,
+            "keywords": ["contributor", "donor", "name", "contributor name", "donor name"],
+            "description": "Name of contributor/donor"
+        },
+        "Contributor City": {
+            "required": False,
+            "keywords": ["city", "contributor city", "donor city"],
+            "description": "Contributor's city"
+        },
+        "Contributor State": {
+            "required": False,
+            "keywords": ["state", "contributor state", "donor state", "st"],
+            "description": "Contributor's state (2-letter code)"
+        },
+        "Contributor Zip Code": {
+            "required": False,
+            "keywords": ["zip", "zipcode", "postal", "contributor zip"],
+            "description": "Contributor's zip code"
+        },
+        "Contributor Employer": {
+            "required": False,
+            "keywords": ["employer", "company", "organization"],
+            "description": "Contributor's employer"
+        },
+        "Contributor Occupation": {
+            "required": False,
+            "keywords": ["occupation", "job", "profession"],
+            "description": "Contributor's occupation"
+        }
+    }
 
+
+def auto_detect_column_mapping(df_columns: list) -> dict:
+    """Auto-detect likely column mappings based on keywords."""
+    expected = get_expected_columns()
+    mapping = {}
+
+    # Convert all columns to lowercase for matching
+    df_columns_lower = {col: col.lower() for col in df_columns}
+
+    for target_col, config in expected.items():
+        best_match = None
+        best_score = 0
+
+        for original_col, col_lower in df_columns_lower.items():
+            if original_col in mapping.values():
+                continue  # Skip already mapped columns
+
+            # Check if any keyword is in the column name
+            score = sum(1 for keyword in config["keywords"] if keyword in col_lower)
+
+            # Exact match gets highest score
+            if col_lower in config["keywords"]:
+                score += 10
+
+            if score > best_score:
+                best_score = score
+                best_match = original_col
+
+        if best_match and best_score > 0:
+            mapping[target_col] = best_match
+
+    return mapping
+
+
+def apply_column_mapping(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
+    """Apply column mapping and parse data types."""
+    # Create reverse mapping (original -> target)
+    reverse_mapping = {v: k for k, v in mapping.items() if v}
+
+    # Rename columns
+    df_mapped = df.rename(columns=reverse_mapping)
+
+    # Parse dates
     date_columns = ["Start Date", "End Date"]
     for col in date_columns:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors='coerce')
+        if col in df_mapped.columns:
+            df_mapped[col] = pd.to_datetime(df_mapped[col], errors='coerce')
 
-    if "Amount" in df.columns:
-        df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce')
+    # Parse amount
+    if "Amount" in df_mapped.columns:
+        df_mapped["Amount"] = pd.to_numeric(df_mapped["Amount"], errors='coerce')
 
+    return df_mapped
+
+
+@st.cache_data(show_spinner=False)
+def load_contribution_data(path_str: str, max_rows: Optional[int] = None) -> pd.DataFrame:
+    """Load contribution CSV (without mapping - raw load)."""
+    df = pd.read_csv(path_str, nrows=max_rows, low_memory=False)
     return df
 
 
@@ -145,13 +241,109 @@ if csv_path is None:
     st.info("👆 Upload a CSV file or enter a path to begin analysis")
     st.stop()
 
-# Load data
+# Load data (raw)
 try:
-    with st.spinner("Loading contribution data..."):
-        df_full = load_contribution_data(str(csv_path), max_rows)
-    st.success(f"✅ Loaded {len(df_full):,} contribution records")
+    with st.spinner("Loading CSV..."):
+        df_raw = load_contribution_data(str(csv_path), max_rows)
 except Exception as exc:
     st.error(f"Failed to load CSV: {exc}")
+    st.stop()
+
+# =============================================================================
+# COLUMN MAPPING
+# =============================================================================
+st.header("🗺️ Column Mapping")
+st.write("Map your CSV columns to the expected format. We've auto-detected likely matches.")
+
+# Initialize mapping in session state
+if "column_mapping" not in st.session_state:
+    st.session_state.column_mapping = auto_detect_column_mapping(df_raw.columns.tolist())
+
+expected_columns = get_expected_columns()
+mapping = st.session_state.column_mapping
+
+# Create mapping UI
+with st.expander("📋 Configure Column Mapping", expanded=True):
+    st.caption(f"Your CSV has {len(df_raw.columns)} columns. Map them to the expected fields below.")
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.write("**Expected Field** (Required fields marked with *)")
+
+    with col2:
+        st.write("**Your CSV Column**")
+
+    st.divider()
+
+    # Create dropdowns for each expected column
+    updated_mapping = {}
+    for target_col, config in expected_columns.items():
+        col1, col2 = st.columns([1, 1])
+
+        with col1:
+            required_marker = " *" if config["required"] else ""
+            st.write(f"**{target_col}**{required_marker}")
+            st.caption(config["description"])
+
+        with col2:
+            options = ["(skip)"] + df_raw.columns.tolist()
+            current_value = mapping.get(target_col, "(skip)")
+
+            if current_value not in options:
+                current_value = "(skip)"
+
+            selected = st.selectbox(
+                f"Map to",
+                options=options,
+                index=options.index(current_value) if current_value in options else 0,
+                key=f"mapping_{target_col}",
+                label_visibility="collapsed"
+            )
+
+            if selected != "(skip)":
+                updated_mapping[target_col] = selected
+
+    st.divider()
+
+    # Validation
+    missing_required = []
+    for target_col, config in expected_columns.items():
+        if config["required"] and target_col not in updated_mapping:
+            missing_required.append(target_col)
+
+    if missing_required:
+        st.error(f"⚠️ Missing required fields: {', '.join(missing_required)}")
+        st.caption("Please map all required fields (*) to continue.")
+        st.stop()
+
+    # Show preview of mapped data
+    with st.expander("👁️ Preview Mapped Data", expanded=False):
+        try:
+            df_preview = apply_column_mapping(df_raw.head(100), updated_mapping)
+            st.dataframe(df_preview, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error previewing mapped data: {e}")
+
+    # Save mapping button
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        if st.button("✅ Apply Mapping", type="primary"):
+            st.session_state.column_mapping = updated_mapping
+            st.success("✅ Mapping applied!")
+            st.rerun()
+
+    with col2:
+        if st.button("🔄 Reset to Auto-Detect"):
+            st.session_state.column_mapping = auto_detect_column_mapping(df_raw.columns.tolist())
+            st.rerun()
+
+# Apply the mapping
+try:
+    df_full = apply_column_mapping(df_raw, st.session_state.column_mapping)
+    st.success(f"✅ Loaded and mapped {len(df_full):,} contribution records")
+except Exception as exc:
+    st.error(f"Failed to apply column mapping: {exc}")
     st.stop()
 
 
