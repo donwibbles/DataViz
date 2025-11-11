@@ -234,6 +234,121 @@ def create_downloadable_chart(fig, base_title: str, filter_context: tuple = ("",
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
+def detect_union_labor(row) -> bool:
+    """Detect if a contribution is from union/labor based on employer/occupation."""
+    union_keywords = [
+        'union', 'labor', 'labour', 'workers', 'afl-cio', 'seiu', 'teamsters',
+        'ufcw', 'ibew', 'iatse', 'afscme', 'uaw', 'uwua', 'laborers',
+        'carpenters', 'electricians', 'plumbers', 'pipefitters', 'ironworkers',
+        'boilermakers', 'machinists', 'steelworkers', 'communications workers',
+        'postal workers', 'letter carriers', 'nurses union', 'teachers union',
+        'cwa', 'aft', 'nea', 'unite here', 'local', 'international brotherhood',
+        'international union', 'united association', 'operating engineers'
+    ]
+
+    employer = str(row.get('Contributor Employer', '')).lower()
+    occupation = str(row.get('Contributor Occupation', '')).lower()
+
+    combined = f"{employer} {occupation}"
+
+    return any(keyword in combined for keyword in union_keywords)
+
+
+def generate_smart_insights(df: pd.DataFrame) -> list:
+    """Generate smart insights and alerts from the data."""
+    insights = []
+
+    if "Amount" not in df.columns:
+        return insights
+
+    # Large donation alert
+    amounts = df["Amount"].dropna()
+    if len(amounts) > 0:
+        avg_amount = amounts.mean()
+        large_threshold = avg_amount * 10
+        large_donations = df[df["Amount"] > large_threshold]
+
+        if len(large_donations) > 0:
+            insights.append({
+                "type": "alert",
+                "icon": "🚨",
+                "title": "Large Donations Detected",
+                "message": f"{len(large_donations)} contributions over ${large_threshold:,.0f} (10x average)"
+            })
+
+    # Contribution velocity (if dates available)
+    if "Start Date" in df.columns:
+        df_with_dates = df[df["Start Date"].notna()].copy()
+        if len(df_with_dates) > 7:
+            df_with_dates = df_with_dates.sort_values("Start Date")
+            df_with_dates["Week"] = df_with_dates["Start Date"].dt.to_period('W')
+            weekly_counts = df_with_dates.groupby("Week").size()
+
+            if len(weekly_counts) >= 2:
+                recent_avg = weekly_counts.tail(2).mean()
+                older_avg = weekly_counts.head(max(2, len(weekly_counts)-2)).mean()
+
+                if recent_avg > older_avg * 1.5:
+                    insights.append({
+                        "type": "positive",
+                        "icon": "📈",
+                        "title": "Increasing Momentum",
+                        "message": f"Recent weeks show {(recent_avg/older_avg - 1)*100:.0f}% more contributions"
+                    })
+                elif recent_avg < older_avg * 0.5:
+                    insights.append({
+                        "type": "warning",
+                        "icon": "📉",
+                        "title": "Declining Activity",
+                        "message": f"Recent contributions down {(1 - recent_avg/older_avg)*100:.0f}% from earlier period"
+                    })
+
+    # Geographic concentration
+    if "Contributor City" in df.columns:
+        city_counts = df["Contributor City"].value_counts()
+        if len(city_counts) > 0:
+            top_city_pct = (city_counts.iloc[0] / len(df)) * 100
+            if top_city_pct > 30:
+                insights.append({
+                    "type": "info",
+                    "icon": "📍",
+                    "title": "Geographic Concentration",
+                    "message": f"{top_city_pct:.0f}% of contributions from {city_counts.index[0]}"
+                })
+
+    # Top donor contribution percentage
+    if "Contributor Name" in df.columns and "Amount" in df.columns:
+        donor_totals = df.groupby("Contributor Name")["Amount"].sum().sort_values(ascending=False)
+        if len(donor_totals) > 0:
+            top_donor_pct = (donor_totals.iloc[0] / df["Amount"].sum()) * 100
+            if top_donor_pct > 5:
+                insights.append({
+                    "type": "info",
+                    "icon": "👤",
+                    "title": "Top Donor Impact",
+                    "message": f"Single largest donor: {top_donor_pct:.1f}% of total contributions"
+                })
+
+    # Union/Labor support detection
+    if "Contributor Employer" in df.columns or "Contributor Occupation" in df.columns:
+        df['is_union'] = df.apply(detect_union_labor, axis=1)
+        union_count = df['is_union'].sum()
+        if union_count > 0:
+            union_pct = (union_count / len(df)) * 100
+            union_amount = df[df['is_union']]["Amount"].sum() if "Amount" in df.columns else 0
+            total_amount = df["Amount"].sum() if "Amount" in df.columns else 1
+            union_amount_pct = (union_amount / total_amount) * 100 if total_amount > 0 else 0
+
+            insights.append({
+                "type": "positive",
+                "icon": "✊",
+                "title": "Union/Labor Support",
+                "message": f"{union_count:,} contributions ({union_amount_pct:.1f}% of total $) from unions/labor"
+            })
+
+    return insights
+
+
 def generate_pdf_report(
     selected_charts: dict,
     summary_stats: dict,
@@ -472,7 +587,7 @@ with st.sidebar:
 
             # Initialize session state for checkboxes
             if "committee_selections" not in st.session_state:
-                st.session_state.committee_selections = {c: False for c in committees}
+                st.session_state.committee_selections = {c: True for c in committees}
 
             # Handle select/deselect all - update all and trigger rerun
             if select_all:
@@ -623,6 +738,177 @@ with col3:
 with col4:
     unique_donors = df["Contributor Name"].nunique() if "Contributor Name" in df.columns else 0
     st.metric("Unique Donors", f"{unique_donors:,}")
+
+
+# =============================================================================
+# SMART INSIGHTS & ALERTS
+# =============================================================================
+st.header("💡 Smart Insights")
+
+insights = generate_smart_insights(df)
+
+if insights:
+    # Display insights in colored cards
+    for insight in insights:
+        if insight["type"] == "alert":
+            st.error(f"{insight['icon']} **{insight['title']}**: {insight['message']}")
+        elif insight["type"] == "warning":
+            st.warning(f"{insight['icon']} **{insight['title']}**: {insight['message']}")
+        elif insight["type"] == "positive":
+            st.success(f"{insight['icon']} **{insight['title']}**: {insight['message']}")
+        else:
+            st.info(f"{insight['icon']} **{insight['title']}**: {insight['message']}")
+else:
+    st.info("No significant patterns detected in current data")
+
+
+# =============================================================================
+# UNION / LABOR SUPPORT ANALYSIS
+# =============================================================================
+with st.expander("✊ Union & Labor Support", expanded=True):
+    if "Contributor Employer" in df.columns or "Contributor Occupation" in df.columns:
+        # Detect union contributions
+        df['is_union'] = df.apply(detect_union_labor, axis=1)
+        union_df = df[df['is_union']]
+
+        if len(union_df) > 0:
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                union_count = len(union_df)
+                union_pct = (union_count / len(df)) * 100
+                st.metric("Union/Labor Contributions", f"{union_count:,}", f"{union_pct:.1f}% of total")
+
+            with col2:
+                union_amount = union_df["Amount"].sum() if "Amount" in df.columns else 0
+                total_amount = df["Amount"].sum() if "Amount" in df.columns else 1
+                union_amount_pct = (union_amount / total_amount) * 100 if total_amount > 0 else 0
+                st.metric("Union/Labor Total $", f"${union_amount:,.2f}", f"{union_amount_pct:.1f}% of total")
+
+            with col3:
+                union_avg = union_df["Amount"].mean() if "Amount" in df.columns and len(union_df) > 0 else 0
+                st.metric("Avg Union Contribution", f"${union_avg:,.2f}")
+
+            st.divider()
+
+            # Top unions/labor organizations
+            col1, col2 = st.columns([2, 1])
+
+            with col1:
+                if len(union_df) > 0:
+                    st.subheader("Top Union/Labor Organizations")
+
+                    # Group by employer
+                    if "Contributor Employer" in union_df.columns:
+                        top_unions = union_df.groupby("Contributor Employer").agg({
+                            "Amount": ["sum", "count"]
+                        }).reset_index()
+                        top_unions.columns = ["Organization", "Total Amount", "Count"]
+                        top_unions = top_unions.sort_values("Total Amount", ascending=False).head(15)
+
+                        fig = px.bar(
+                            top_unions,
+                            x="Total Amount",
+                            y="Organization",
+                            orientation="h",
+                            title="Top 15 Union/Labor Organizations by Contribution Amount"
+                        )
+                        fig.update_layout(height=500)
+                        create_downloadable_chart(fig, "union_labor_orgs", filter_context, "union_orgs")
+
+            with col2:
+                st.subheader("Union vs Non-Union")
+
+                comparison_data = pd.DataFrame({
+                    "Type": ["Union/Labor", "Non-Union"],
+                    "Count": [len(union_df), len(df) - len(union_df)],
+                    "Amount": [
+                        union_df["Amount"].sum() if "Amount" in df.columns else 0,
+                        df[~df['is_union']]["Amount"].sum() if "Amount" in df.columns else 0
+                    ]
+                })
+
+                fig = px.pie(
+                    comparison_data,
+                    values="Amount",
+                    names="Type",
+                    title="Union vs Non-Union Contributions ($)",
+                    color_discrete_sequence=['#2E86AB', '#A23B72']
+                )
+                fig.update_layout(height=400)
+                create_downloadable_chart(fig, "union_vs_nonunion", filter_context, "union_pie")
+
+        else:
+            st.info("No union or labor contributions detected in current data")
+    else:
+        st.warning("Employer/Occupation data not available for union detection")
+
+
+# =============================================================================
+# COMMITTEE COMPARISON MODE
+# =============================================================================
+if selected_committees and len(selected_committees) >= 2 and "Recipient Committee" in df.columns:
+    with st.expander("⚖️ Committee Comparison", expanded=True):
+        st.subheader("Side-by-Side Committee Analysis")
+
+        # Comparison metrics table
+        comparison_stats = []
+        for committee in selected_committees:
+            committee_df = df[df["Recipient Committee"] == committee]
+            comparison_stats.append({
+                "Committee": committee,
+                "Total $": committee_df["Amount"].sum() if "Amount" in df.columns else 0,
+                "# Contributions": len(committee_df),
+                "Avg $": committee_df["Amount"].mean() if "Amount" in df.columns and len(committee_df) > 0 else 0,
+                "# Donors": committee_df["Contributor Name"].nunique() if "Contributor Name" in df.columns else 0
+            })
+
+        comparison_df = pd.DataFrame(comparison_stats)
+
+        # Display comparison table
+        st.dataframe(
+            comparison_df.style.format({
+                "Total $": "${:,.2f}",
+                "# Contributions": "{:,}",
+                "Avg $": "${:,.2f}",
+                "# Donors": "{:,}"
+            }),
+            use_container_width=True
+        )
+
+        # Overlaid time series if dates available
+        if "Start Date" in df.columns:
+            st.subheader("Contribution Trends Over Time")
+
+            fig = go.Figure()
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+
+            for idx, committee in enumerate(selected_committees):
+                committee_df = df[df["Recipient Committee"] == committee]
+                committee_df = committee_df[committee_df["Start Date"].notna()].copy()
+
+                if len(committee_df) > 0:
+                    daily_data = committee_df.groupby(committee_df["Start Date"].dt.date).agg({
+                        "Amount": "sum"
+                    }).reset_index()
+                    daily_data.columns = ["Date", "Amount"]
+
+                    fig.add_trace(go.Scatter(
+                        x=daily_data["Date"],
+                        y=daily_data["Amount"],
+                        mode='lines+markers',
+                        name=committee,
+                        line=dict(color=colors[idx % len(colors)], width=2)
+                    ))
+
+            fig.update_layout(
+                title="Daily Contribution Amount by Committee",
+                xaxis_title="Date",
+                yaxis_title="Total Amount ($)",
+                hovermode="x unified",
+                height=500
+            )
+            create_downloadable_chart(fig, "committee_comparison_timeline", filter_context, "comparison_timeline")
 
 
 # =============================================================================
@@ -1318,6 +1604,28 @@ with st.expander("🎨 Select Charts for PDF Report", expanded=False):
         "occupations": "Top Occupations"
     }
 
+    # Select All / Deselect All buttons for PDF charts
+    btn_col1, btn_col2, _ = st.columns([1, 1, 2])
+    select_all_pdf = btn_col1.button("Select All Available", key="select_all_pdf_charts")
+    deselect_all_pdf = btn_col2.button("Deselect All", key="deselect_all_pdf_charts")
+
+    # Initialize session state for PDF chart selections
+    if "pdf_chart_selections" not in st.session_state:
+        st.session_state.pdf_chart_selections = {}
+
+    # Handle select/deselect all
+    if select_all_pdf:
+        # Select all available charts
+        if "pdf_charts" in st.session_state:
+            for key in available_charts.keys():
+                if key in st.session_state.pdf_charts:
+                    st.session_state.pdf_chart_selections[key] = True
+        st.rerun()
+
+    if deselect_all_pdf:
+        st.session_state.pdf_chart_selections = {key: False for key in available_charts.keys()}
+        st.rerun()
+
     col1, col2, col3 = st.columns(3)
 
     selected_for_pdf = {}
@@ -1329,12 +1637,24 @@ with st.expander("🎨 Select Charts for PDF Report", expanded=False):
         with col:
             # Check if chart is available in session state
             is_available = "pdf_charts" in st.session_state and key in st.session_state.pdf_charts
+
+            # Initialize checkbox state if not present
+            if key not in st.session_state.pdf_chart_selections:
+                st.session_state.pdf_chart_selections[key] = is_available
+
+            # Get value from session state
+            checkbox_value = st.session_state.pdf_chart_selections.get(key, False) and is_available
+
             checked = st.checkbox(
                 name,
-                value=is_available,
+                value=checkbox_value,
                 key=f"pdf_{key}",
                 disabled=not is_available
             )
+
+            # Update session state
+            st.session_state.pdf_chart_selections[key] = checked
+
             if checked and is_available:
                 selected_for_pdf[key] = name
 
