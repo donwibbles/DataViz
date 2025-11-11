@@ -177,26 +177,31 @@ with st.sidebar:
 
             # Initialize session state for checkboxes
             if "committee_selections" not in st.session_state:
-                st.session_state.committee_selections = {}
+                st.session_state.committee_selections = {c: False for c in committees}
 
-            # Handle select/deselect all
+            # Handle select/deselect all - update all and trigger rerun
             if select_all:
-                for committee in committees:
-                    st.session_state.committee_selections[committee] = True
+                st.session_state.committee_selections = {c: True for c in committees}
+                st.rerun()
             if deselect_all:
-                for committee in committees:
-                    st.session_state.committee_selections[committee] = False
+                st.session_state.committee_selections = {c: False for c in committees}
+                st.rerun()
 
             # Show checkboxes for each committee
             for committee in committees:
                 if committee not in st.session_state.committee_selections:
                     st.session_state.committee_selections[committee] = False
 
-                if st.checkbox(
+                # Checkbox updates session state on change
+                checked = st.checkbox(
                     committee,
                     value=st.session_state.committee_selections[committee],
-                    key=f"committee_{committee}"
-                ):
+                    key=f"committee_checkbox_{committee}"
+                )
+                # Update session state
+                st.session_state.committee_selections[committee] = checked
+
+                if checked:
                     selected_committees.append(committee)
 
     # Date range filter
