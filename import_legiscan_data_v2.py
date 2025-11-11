@@ -46,11 +46,11 @@ def import_legislators(csv_path: str) -> int:
             # Check if this is a committee (committee_id != 0)
             is_committee = row.get('committee_id') and row.get('committee_id') != '0'
 
-            # Map chamber: role can be "Sen" or "Asm" for CA
+            # Map chamber: role can be "Sen" or "Rep" (Representative) for CA
             role = row.get('role', '')
             if role == 'Sen':
                 chamber = 'Senate'
-            elif role == 'Asm':
+            elif role == 'Rep':
                 chamber = 'Assembly'
             else:
                 chamber = 'Unknown'
