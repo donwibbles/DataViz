@@ -149,22 +149,37 @@ def import_sponsors(csv_path: str) -> int:
             }
             sponsors.append(sponsor)
 
-    if sponsors:
+    # Deduplicate sponsors based on UNIQUE constraint (bill_id, legislator_id)
+    sponsors_dict = {}
+    for sponsor in sponsors:
+        key = (sponsor['bill_id'], sponsor['legislator_id'])
+        sponsors_dict[key] = sponsor
+
+    unique_sponsors = list(sponsors_dict.values())
+    duplicates_removed = len(sponsors) - len(unique_sponsors)
+
+    if duplicates_removed > 0:
+        print(f"  Removed {duplicates_removed} duplicate sponsors")
+
+    print(f"  Importing {len(unique_sponsors)} unique bill authors...")
+
+    if unique_sponsors:
         # Import in chunks
         chunk_size = 500
         total_imported = 0
 
-        for i in range(0, len(sponsors), chunk_size):
-            chunk = sponsors[i:i + chunk_size]
+        for i in range(0, len(unique_sponsors), chunk_size):
+            chunk = unique_sponsors[i:i + chunk_size]
             try:
                 supabase.table('bill_authors').upsert(
                     chunk,
                     on_conflict='bill_id,legislator_id'
                 ).execute()
                 total_imported += len(chunk)
-                print(f"  Imported {total_imported}/{len(sponsors)} bill authors")
+                print(f"  Imported {total_imported}/{len(unique_sponsors)} bill authors")
             except Exception as e:
                 print(f"❌ Error importing sponsors chunk: {e}")
+                print(f"   Continuing with next chunk...")
 
         print(f"✅ Imported {total_imported} bill authors total")
         return total_imported
