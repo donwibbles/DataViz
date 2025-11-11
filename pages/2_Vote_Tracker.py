@@ -48,7 +48,7 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
     else:
         # Import vote tracker module
         try:
-            from openstates import fetch_legislators, search_bills
+            from openstates import fetch_legislators, search_bills, get_available_sessions
 
             # Create tabs for different search modes
             tab1, tab2 = st.tabs(["🔍 Find Legislators", "📜 Find Bills"])
@@ -180,9 +180,14 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                     )
 
                 with col2:
+                    # Get available sessions from database
+                    available_sessions = get_available_sessions()
+                    if not available_sessions:
+                        available_sessions = ["2025-2026"]  # Fallback
+
                     session_filter = st.selectbox(
                         "Legislative Session",
-                        options=["2023-2024", "2021-2022", "2019-2020"],
+                        options=available_sessions,
                         key="session_filter"
                     )
 

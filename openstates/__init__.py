@@ -13,7 +13,8 @@ if USE_SUPABASE:
         fetch_legislators,
         fetch_legislator_votes,
         fetch_bill_details,
-        search_bills
+        search_bills,
+        get_available_sessions
     )
 else:
     from .api import (
@@ -22,6 +23,9 @@ else:
         fetch_bill_details,
         search_bills
     )
+    # Fallback for API - return hardcoded sessions
+    def get_available_sessions():
+        return ["2023-2024", "2021-2022", "2019-2020"]
 
 __all__ = [
     'Legislator',
@@ -30,5 +34,6 @@ __all__ = [
     'fetch_legislators',
     'fetch_legislator_votes',
     'fetch_bill_details',
-    'search_bills'
+    'search_bills',
+    'get_available_sessions'
 ]

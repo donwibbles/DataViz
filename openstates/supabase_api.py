@@ -135,9 +135,37 @@ def fetch_legislator_votes(
         return []
 
 
+def get_available_sessions() -> List[str]:
+    """
+    Get list of available legislative sessions from the database.
+
+    Returns:
+        List of session names (e.g., ['2025-2026', '2023-2024'])
+    """
+    supabase = get_supabase_client()
+    if not supabase:
+        return []
+
+    try:
+        # Get distinct session names, ordered by most recent first
+        response = supabase.table('bills') \
+            .select('session_name') \
+            .order('session_name', desc=True) \
+            .execute()
+
+        # Extract unique session names
+        sessions = list(set([row['session_name'] for row in response.data if row.get('session_name')]))
+        sessions.sort(reverse=True)  # Most recent first
+        return sessions
+
+    except Exception as e:
+        st.error(f"Error fetching sessions: {e}")
+        return []
+
+
 def search_bills(
     query: str = "",
-    session: str = "2023-2024",
+    session: str = "2025-2026",
     subject: Optional[str] = None
 ) -> List[Bill]:
     """
@@ -145,7 +173,7 @@ def search_bills(
 
     Args:
         query: Search query (bill number or keyword in title)
-        session: Legislative session
+        session: Legislative session name (e.g., '2025-2026')
         subject: Filter by subject
 
     Returns:
@@ -156,8 +184,8 @@ def search_bills(
         return []
 
     try:
-        # Build query
-        db_query = supabase.table('bills').select('*').eq('session', session)
+        # Build query using session_name
+        db_query = supabase.table('bills').select('*').eq('session_name', session)
 
         # Search by bill number or title
         if query:

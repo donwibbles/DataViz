@@ -222,7 +222,7 @@ def main():
 
     # Update these paths to your downloaded LegiScan files
     # The actual filenames may vary - check your downloaded dataset
-    dataset_dir = Path("./legiscan_ca_data")  # Change this to your extracted folder
+    dataset_dir = Path("./legiscan_ca_data/CA/2025-2026_Regular_Session/csv")  # Change this to your extracted folder
 
     # Alternative names to try
     alt_files = {
