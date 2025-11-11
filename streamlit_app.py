@@ -22,7 +22,6 @@ def _persist_uploaded_file(uploaded_file: UploadedFile) -> Optional[Path]:
     if uploaded_file is None:
         return None
 
-    # Reuse the same temp file when the upload has not changed.
     metadata = st.session_state.get("uploaded_file_meta")
     if metadata and metadata.get("name") == uploaded_file.name and metadata.get("size") == uploaded_file.size:
         return Path(metadata["path"])
@@ -45,17 +44,30 @@ def load_contribution_data(path_str: str, max_rows: Optional[int] = None) -> pd.
     """Load contribution CSV and parse dates."""
     df = pd.read_csv(path_str, nrows=max_rows, low_memory=False)
 
-    # Try to parse date columns
     date_columns = ["Start Date", "End Date"]
     for col in date_columns:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors='coerce')
 
-    # Clean amount column
     if "Amount" in df.columns:
         df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce')
 
     return df
+
+
+def create_downloadable_chart(fig, title: str):
+    """Display a Plotly chart with download button."""
+    # Configure chart to show download options
+    config = {
+        'toImageButtonOptions': {
+            'format': 'png',
+            'filename': title.replace(' ', '_').lower(),
+            'height': 800,
+            'width': 1200,
+            'scale': 2
+        }
+    }
+    st.plotly_chart(fig, use_container_width=True, config=config)
 
 
 # Sidebar configuration
@@ -76,30 +88,126 @@ with st.sidebar:
     st.caption("Upload your campaign finance CSV to begin analysis")
 
 
-# Determine CSV path
 csv_path: Optional[Path] = None
 if uploaded_file is not None:
     csv_path = _persist_uploaded_file(uploaded_file)
 elif manual_path.strip():
     csv_path = Path(manual_path).expanduser()
 
-
-# Main analysis section
 if csv_path is None:
     st.info("👆 Upload a CSV file or enter a path to begin analysis")
     st.stop()
 
-
 # Load data
 try:
     with st.spinner("Loading contribution data..."):
-        df = load_contribution_data(str(csv_path), max_rows)
-
-    st.success(f"✅ Loaded {len(df):,} contribution records")
-
+        df_full = load_contribution_data(str(csv_path), max_rows)
+    st.success(f"✅ Loaded {len(df_full):,} contribution records")
 except Exception as exc:
     st.error(f"Failed to load CSV: {exc}")
     st.stop()
+
+
+# =============================================================================
+# FILTERS
+# =============================================================================
+with st.sidebar:
+    st.divider()
+    st.header("🔍 Filters")
+
+    # Committee filter (multi-select)
+    selected_committees = []
+    if "Recipient Committee" in df_full.columns:
+        committees = sorted(df_full["Recipient Committee"].dropna().unique().tolist())
+        selected_committees = st.multiselect(
+            "Select Committee(s)",
+            options=committees,
+            help="Leave empty to show all committees"
+        )
+
+    # Date range filter
+    date_min, date_max = None, None
+    if "Start Date" in df_full.columns:
+        valid_dates = df_full["Start Date"].dropna()
+        if len(valid_dates) > 0:
+            min_date = valid_dates.min().date()
+            max_date = valid_dates.max().date()
+
+            date_range = st.date_input(
+                "Date Range",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date,
+                help="Filter contributions by date"
+            )
+            if isinstance(date_range, tuple) and len(date_range) == 2:
+                date_min, date_max = date_range
+
+    # Amount range filter
+    amount_min, amount_max = None, None
+    if "Amount" in df_full.columns:
+        valid_amounts = df_full["Amount"].dropna()
+        if len(valid_amounts) > 0:
+            min_amt = float(valid_amounts.min())
+            max_amt = float(valid_amounts.max())
+
+            amount_range = st.slider(
+                "Amount Range ($)",
+                min_value=min_amt,
+                max_value=max_amt,
+                value=(min_amt, max_amt),
+                help="Filter by contribution amount"
+            )
+            amount_min, amount_max = amount_range
+
+    # Contributor search
+    contributor_search = st.text_input(
+        "Search Contributor Name",
+        help="Case-insensitive search in contributor names"
+    )
+
+    # State filter
+    selected_states = []
+    if "Contributor State" in df_full.columns:
+        states = sorted(df_full["Contributor State"].dropna().unique().tolist())
+        selected_states = st.multiselect(
+            "Filter by State(s)",
+            options=states,
+            help="Leave empty to show all states"
+        )
+
+
+# Apply filters
+df = df_full.copy()
+active_filters = []
+
+if selected_committees:
+    df = df[df["Recipient Committee"].isin(selected_committees)]
+    active_filters.append(f"Committees: {', '.join(selected_committees)}")
+
+if date_min and date_max and "Start Date" in df.columns:
+    df = df[(df["Start Date"].dt.date >= date_min) & (df["Start Date"].dt.date <= date_max)]
+    active_filters.append(f"Dates: {date_min} to {date_max}")
+
+if amount_min is not None and amount_max is not None and "Amount" in df.columns:
+    df = df[(df["Amount"] >= amount_min) & (df["Amount"] <= amount_max)]
+    active_filters.append(f"Amount: ${amount_min:,.2f} to ${amount_max:,.2f}")
+
+if contributor_search:
+    df = df[df["Contributor Name"].str.contains(contributor_search, case=False, na=False)]
+    active_filters.append(f"Contributor: '{contributor_search}'")
+
+if selected_states:
+    df = df[df["Contributor State"].isin(selected_states)]
+    active_filters.append(f"States: {', '.join(selected_states)}")
+
+
+# Display active filters
+if active_filters:
+    st.info(f"🔎 **Active Filters:** {' | '.join(active_filters)}")
+    st.caption(f"Showing {len(df):,} of {len(df_full):,} records ({len(df)/len(df_full)*100:.1f}%)")
+else:
+    st.info(f"📊 Showing all {len(df):,} records")
 
 
 # Display raw data preview
@@ -132,11 +240,11 @@ with col4:
 
 
 # =============================================================================
-# CONTRIBUTIONS BY COMMITTEE
+# CONTRIBUTIONS BY COMMITTEE (only show if not filtered to specific committees)
 # =============================================================================
-st.header("🏛️ Contributions by Committee")
+if not selected_committees and "Recipient Committee" in df.columns and "Amount" in df.columns:
+    st.header("🏛️ Contributions by Committee")
 
-if "Recipient Committee" in df.columns and "Amount" in df.columns:
     committee_stats = (
         df.groupby("Recipient Committee")
         .agg({
@@ -159,7 +267,7 @@ if "Recipient Committee" in df.columns and "Amount" in df.columns:
             labels={"Total Amount": "Total Amount ($)", "Recipient Committee": "Committee"}
         )
         fig.update_layout(height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        create_downloadable_chart(fig, "contributions_by_committee")
 
     with col2:
         st.dataframe(
@@ -171,8 +279,6 @@ if "Recipient Committee" in df.columns and "Amount" in df.columns:
             use_container_width=True,
             height=500
         )
-else:
-    st.warning("Required columns not found: 'Recipient Committee' and 'Amount'")
 
 
 # =============================================================================
@@ -181,7 +287,6 @@ else:
 st.header("💵 Contribution Amount Distribution")
 
 if "Amount" in df.columns:
-    # Create amount ranges
     bins = [0, 50, 100, 250, 500, 1000, 2500, 5000, float('inf')]
     labels = ['$0-50', '$50-100', '$100-250', '$250-500', '$500-1K', '$1K-2.5K', '$2.5K-5K', '$5K+']
 
@@ -203,7 +308,7 @@ if "Amount" in df.columns:
             title="Number of Contributions by Amount Range",
             labels={"Count": "Number of Contributions"}
         )
-        st.plotly_chart(fig, use_container_width=True)
+        create_downloadable_chart(fig, "contribution_count_by_range")
 
     with col2:
         fig = px.bar(
@@ -213,13 +318,93 @@ if "Amount" in df.columns:
             title="Total Contribution Amount by Range",
             labels={"Total Amount": "Total Amount ($)"}
         )
-        st.plotly_chart(fig, use_container_width=True)
-else:
-    st.warning("Amount column not found")
+        create_downloadable_chart(fig, "contribution_total_by_range")
 
 
 # =============================================================================
-# TOP LOCATIONS
+# GEOGRAPHIC VISUALIZATIONS - MAPS
+# =============================================================================
+st.header("🗺️ Geographic Distribution")
+
+if "Contributor State" in df.columns and "Amount" in df.columns:
+
+    # US State Map
+    st.subheader("United States Contribution Map")
+
+    state_data = (
+        df.groupby("Contributor State")
+        .agg({
+            "Amount": "sum",
+            "Contributor Name": "nunique"
+        })
+        .reset_index()
+    )
+    state_data.columns = ["State", "Total Amount", "Unique Donors"]
+
+    fig = px.choropleth(
+        state_data,
+        locations="State",
+        locationmode="USA-states",
+        color="Total Amount",
+        hover_name="State",
+        hover_data={"Total Amount": ":$,.2f", "Unique Donors": ":,"},
+        scope="usa",
+        title="Contributions by State",
+        color_continuous_scale="Blues"
+    )
+    fig.update_layout(height=500)
+    create_downloadable_chart(fig, "us_contribution_map")
+
+    # California Map (if CA data exists)
+    ca_data = df[df["Contributor State"] == "CA"]
+    if len(ca_data) > 0 and "Contributor City" in df.columns:
+        st.subheader("California Contribution Map")
+
+        ca_city_data = (
+            ca_data.groupby("Contributor City")
+            .agg({
+                "Amount": "sum",
+                "Contributor Name": "count"
+            })
+            .reset_index()
+        )
+        ca_city_data.columns = ["City", "Total Amount", "Number of Contributions"]
+        ca_city_data = ca_city_data.sort_values("Total Amount", ascending=False).head(30)
+
+        # For better visualization, create a scatter geo map
+        fig = px.scatter_geo(
+            ca_city_data,
+            locations=["CA"] * len(ca_city_data),
+            locationmode="USA-states",
+            size="Total Amount",
+            hover_name="City",
+            hover_data={"Total Amount": ":$,.2f", "Number of Contributions": ":,"},
+            title="Top 30 California Cities by Contribution Amount",
+            scope="usa",
+            size_max=50
+        )
+        fig.update_geos(
+            center=dict(lat=37, lon=-119),
+            projection_scale=5
+        )
+        fig.update_layout(height=600)
+        create_downloadable_chart(fig, "california_contribution_map")
+
+        # Also show bar chart for CA cities
+        st.subheader("Top California Cities")
+        fig = px.bar(
+            ca_city_data.head(15),
+            x="Total Amount",
+            y="City",
+            orientation="h",
+            title="Top 15 California Cities by Contribution Amount"
+        )
+        fig.update_layout(height=500)
+        create_downloadable_chart(fig, "california_cities_bar")
+
+
+# =============================================================================
+# TOP LOCATIONS (for non-map view)
 # =============================================================================
 st.header("📍 Top Contributing Locations")
 
@@ -249,9 +434,7 @@ with col1:
             labels={"Total Amount": "Total Amount ($)"}
         )
         fig.update_layout(height=500)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("Contributor City or Amount column not found")
+        create_downloadable_chart(fig, "top_cities")
 
 with col2:
     st.subheader("Top 15 States")
@@ -277,9 +460,7 @@ with col2:
             labels={"Total Amount": "Total Amount ($)"}
         )
         fig.update_layout(height=500)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("Contributor State or Amount column not found")
+        create_downloadable_chart(fig, "top_states")
 
 
 # =============================================================================
@@ -291,7 +472,6 @@ if "Start Date" in df.columns and "Amount" in df.columns:
     df_time = df[df["Start Date"].notna()].copy()
 
     if len(df_time) > 0:
-        # Aggregate by date
         daily_contributions = (
             df_time.groupby(df_time["Start Date"].dt.date)
             .agg({
@@ -313,7 +493,7 @@ if "Start Date" in df.columns and "Amount" in df.columns:
                 labels={"Total Amount": "Total Amount ($)"}
             )
             fig.update_traces(line_color='#1f77b4', line_width=2)
-            st.plotly_chart(fig, use_container_width=True)
+            create_downloadable_chart(fig, "daily_amounts")
 
         with col2:
             fig = px.line(
@@ -324,7 +504,7 @@ if "Start Date" in df.columns and "Amount" in df.columns:
                 labels={"Number of Contributions": "Count"}
             )
             fig.update_traces(line_color='#ff7f0e', line_width=2)
-            st.plotly_chart(fig, use_container_width=True)
+            create_downloadable_chart(fig, "daily_counts")
 
         # Monthly aggregation
         df_time["Month"] = df_time["Start Date"].dt.to_period('M').astype(str)
@@ -364,11 +544,7 @@ if "Start Date" in df.columns and "Amount" in df.columns:
             hovermode="x unified",
             height=500
         )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("No valid dates found in Start Date column")
-else:
-    st.warning("Start Date or Amount column not found")
+        create_downloadable_chart(fig, "monthly_contributions")
 
 
 # =============================================================================
@@ -396,8 +572,6 @@ with col1:
             use_container_width=True,
             height=400
         )
-    else:
-        st.warning("Contributor Name or Amount column not found")
 
 with col2:
     st.subheader("Top 15 Occupations")
@@ -422,9 +596,7 @@ with col2:
             title="Top 15 Occupations by Contribution Amount"
         )
         fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("Contributor Occupation or Amount column not found")
+        create_downloadable_chart(fig, "top_occupations")
 
 
 # =============================================================================
@@ -437,14 +609,13 @@ col1, col2 = st.columns(2)
 with col1:
     csv_data = df.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="Download Full Dataset (CSV)",
+        label="📄 Download Filtered Dataset (CSV)",
         data=csv_data,
-        file_name="contributions_export.csv",
+        file_name=f"contributions_filtered_{len(df)}_records.csv",
         mime="text/csv"
     )
 
 with col2:
-    # Create summary report
     summary_data = {
         "Metric": [
             "Total Contributions",
@@ -465,8 +636,11 @@ with col2:
     summary_csv = summary_df.to_csv(index=False).encode('utf-8')
 
     st.download_button(
-        label="Download Summary Report (CSV)",
+        label="📊 Download Summary Report (CSV)",
         data=summary_csv,
         file_name="contribution_summary.csv",
         mime="text/csv"
     )
+
+st.divider()
+st.caption("💡 Tip: Use the camera icon in the top-right of any chart to download it as a PNG image")
