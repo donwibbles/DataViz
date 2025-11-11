@@ -236,14 +236,22 @@ def create_downloadable_chart(fig, base_title: str, filter_context: tuple = ("",
 
 def detect_union_labor(row) -> bool:
     """Detect if a contribution is from union/labor based on employer/occupation."""
+    # More precise keywords - specific union names and acronyms only
     union_keywords = [
-        'union', 'labor', 'labour', 'workers', 'afl-cio', 'seiu', 'teamsters',
-        'ufcw', 'ibew', 'iatse', 'afscme', 'uaw', 'uwua', 'laborers',
-        'carpenters', 'electricians', 'plumbers', 'pipefitters', 'ironworkers',
-        'boilermakers', 'machinists', 'steelworkers', 'communications workers',
-        'postal workers', 'letter carriers', 'nurses union', 'teachers union',
-        'cwa', 'aft', 'nea', 'unite here', 'local', 'international brotherhood',
-        'international union', 'united association', 'operating engineers'
+        # Union-specific phrases
+        ' union', 'labor union', 'labour union', 'union local', 'trade union',
+        'labor council', 'labour council', 'union member',
+        # Specific major unions and federations
+        'afl-cio', 'seiu', 'teamsters', 'ufcw', 'ibew', 'iatse', 'afscme',
+        'uaw', 'uwua', 'unite here', 'cwa', 'aft', 'nea', 'iue-cwa',
+        # International unions
+        'international brotherhood', 'international union', 'international association',
+        'united association', 'united steelworkers', 'united auto workers',
+        # Specific phrases
+        'nurses union', 'teachers union', 'faculty union', 'employees union',
+        'communication workers', 'postal workers', 'letter carriers',
+        'operating engineers', 'laborers international', 'carpenters union',
+        'electricians union', 'plumbers union', 'pipefitters union'
     ]
 
     employer = str(row.get('Contributor Employer', '')).lower()
@@ -254,56 +262,93 @@ def detect_union_labor(row) -> bool:
     return any(keyword in combined for keyword in union_keywords)
 
 
-def generate_smart_insights(df: pd.DataFrame) -> list:
-    """Generate smart insights and alerts from the data."""
+def generate_smart_insights(df: pd.DataFrame, single_committee_mode: bool = False) -> list:
+    """Generate smart insights and alerts from the data.
+
+    Args:
+        df: DataFrame to analyze
+        single_committee_mode: If True, show detailed insights only relevant for single committee analysis
+    """
     insights = []
 
     if "Amount" not in df.columns:
         return insights
 
-    # Large donation alert
-    amounts = df["Amount"].dropna()
-    if len(amounts) > 0:
-        avg_amount = amounts.mean()
-        large_threshold = avg_amount * 10
-        large_donations = df[df["Amount"] > large_threshold]
+    # These insights only make sense when viewing a single committee
+    if single_committee_mode:
+        # Large donation alert
+        amounts = df["Amount"].dropna()
+        if len(amounts) > 0:
+            avg_amount = amounts.mean()
+            large_threshold = avg_amount * 10
+            large_donations = df[df["Amount"] > large_threshold]
 
-        if len(large_donations) > 0:
-            insights.append({
-                "type": "alert",
-                "icon": "🚨",
-                "title": "Large Donations Detected",
-                "message": f"{len(large_donations)} contributions over ${large_threshold:,.0f} (10x average)"
-            })
+            if len(large_donations) > 0:
+                insights.append({
+                    "type": "alert",
+                    "icon": "🚨",
+                    "title": "Large Donations Detected",
+                    "message": f"{len(large_donations)} contributions over ${large_threshold:,.0f} (10x average)"
+                })
 
-    # Contribution velocity (if dates available)
-    if "Start Date" in df.columns:
-        df_with_dates = df[df["Start Date"].notna()].copy()
-        if len(df_with_dates) > 7:
-            df_with_dates = df_with_dates.sort_values("Start Date")
-            df_with_dates["Week"] = df_with_dates["Start Date"].dt.to_period('W')
-            weekly_counts = df_with_dates.groupby("Week").size()
+        # Contribution velocity (if dates available)
+        if "Start Date" in df.columns:
+            df_with_dates = df[df["Start Date"].notna()].copy()
+            if len(df_with_dates) > 7:
+                df_with_dates = df_with_dates.sort_values("Start Date")
+                df_with_dates["Week"] = df_with_dates["Start Date"].dt.to_period('W')
+                weekly_counts = df_with_dates.groupby("Week").size()
 
-            if len(weekly_counts) >= 2:
-                recent_avg = weekly_counts.tail(2).mean()
-                older_avg = weekly_counts.head(max(2, len(weekly_counts)-2)).mean()
+                if len(weekly_counts) >= 2:
+                    recent_avg = weekly_counts.tail(2).mean()
+                    older_avg = weekly_counts.head(max(2, len(weekly_counts)-2)).mean()
 
-                if recent_avg > older_avg * 1.5:
+                    if recent_avg > older_avg * 1.5:
+                        insights.append({
+                            "type": "positive",
+                            "icon": "📈",
+                            "title": "Increasing Momentum",
+                            "message": f"Recent weeks show {(recent_avg/older_avg - 1)*100:.0f}% more contributions"
+                        })
+                    elif recent_avg < older_avg * 0.5:
+                        insights.append({
+                            "type": "warning",
+                            "icon": "📉",
+                            "title": "Declining Activity",
+                            "message": f"Recent contributions down {(1 - recent_avg/older_avg)*100:.0f}% from earlier period"
+                        })
+
+        # Top donor contribution percentage
+        if "Contributor Name" in df.columns and "Amount" in df.columns:
+            donor_totals = df.groupby("Contributor Name")["Amount"].sum().sort_values(ascending=False)
+            if len(donor_totals) > 0:
+                top_donor_pct = (donor_totals.iloc[0] / df["Amount"].sum()) * 100
+                if top_donor_pct > 5:
                     insights.append({
-                        "type": "positive",
-                        "icon": "📈",
-                        "title": "Increasing Momentum",
-                        "message": f"Recent weeks show {(recent_avg/older_avg - 1)*100:.0f}% more contributions"
-                    })
-                elif recent_avg < older_avg * 0.5:
-                    insights.append({
-                        "type": "warning",
-                        "icon": "📉",
-                        "title": "Declining Activity",
-                        "message": f"Recent contributions down {(1 - recent_avg/older_avg)*100:.0f}% from earlier period"
+                        "type": "info",
+                        "icon": "👤",
+                        "title": "Top Donor Impact",
+                        "message": f"Single largest donor: {top_donor_pct:.1f}% of total contributions"
                     })
 
-    # Geographic concentration
+        # Union/Labor support detection
+        if "Contributor Employer" in df.columns or "Contributor Occupation" in df.columns:
+            df['is_union'] = df.apply(detect_union_labor, axis=1)
+            union_count = df['is_union'].sum()
+            if union_count > 0:
+                union_pct = (union_count / len(df)) * 100
+                union_amount = df[df['is_union']]["Amount"].sum() if "Amount" in df.columns else 0
+                total_amount = df["Amount"].sum() if "Amount" in df.columns else 1
+                union_amount_pct = (union_amount / total_amount) * 100 if total_amount > 0 else 0
+
+                insights.append({
+                    "type": "positive",
+                    "icon": "✊",
+                    "title": "Union/Labor Support",
+                    "message": f"{union_count:,} contributions ({union_amount_pct:.1f}% of total $) from unions/labor"
+                })
+
+    # Geographic concentration - useful for both single and multi-committee views
     if "Contributor City" in df.columns:
         city_counts = df["Contributor City"].value_counts()
         if len(city_counts) > 0:
@@ -315,36 +360,6 @@ def generate_smart_insights(df: pd.DataFrame) -> list:
                     "title": "Geographic Concentration",
                     "message": f"{top_city_pct:.0f}% of contributions from {city_counts.index[0]}"
                 })
-
-    # Top donor contribution percentage
-    if "Contributor Name" in df.columns and "Amount" in df.columns:
-        donor_totals = df.groupby("Contributor Name")["Amount"].sum().sort_values(ascending=False)
-        if len(donor_totals) > 0:
-            top_donor_pct = (donor_totals.iloc[0] / df["Amount"].sum()) * 100
-            if top_donor_pct > 5:
-                insights.append({
-                    "type": "info",
-                    "icon": "👤",
-                    "title": "Top Donor Impact",
-                    "message": f"Single largest donor: {top_donor_pct:.1f}% of total contributions"
-                })
-
-    # Union/Labor support detection
-    if "Contributor Employer" in df.columns or "Contributor Occupation" in df.columns:
-        df['is_union'] = df.apply(detect_union_labor, axis=1)
-        union_count = df['is_union'].sum()
-        if union_count > 0:
-            union_pct = (union_count / len(df)) * 100
-            union_amount = df[df['is_union']]["Amount"].sum() if "Amount" in df.columns else 0
-            total_amount = df["Amount"].sum() if "Amount" in df.columns else 1
-            union_amount_pct = (union_amount / total_amount) * 100 if total_amount > 0 else 0
-
-            insights.append({
-                "type": "positive",
-                "icon": "✊",
-                "title": "Union/Labor Support",
-                "message": f"{union_count:,} contributions ({union_amount_pct:.1f}% of total $) from unions/labor"
-            })
 
     return insights
 
@@ -745,7 +760,12 @@ with col4:
 # =============================================================================
 st.header("💡 Smart Insights")
 
-insights = generate_smart_insights(df)
+# Only show detailed insights when viewing a single committee
+single_committee_mode = len(selected_committees) == 1
+if not single_committee_mode and len(selected_committees) > 1:
+    st.info("💡 Select a single committee to see detailed insights (large donations, momentum trends, top donors, union support)")
+
+insights = generate_smart_insights(df, single_committee_mode=single_committee_mode)
 
 if insights:
     # Display insights in colored cards
@@ -759,7 +779,8 @@ if insights:
         else:
             st.info(f"{insight['icon']} **{insight['title']}**: {insight['message']}")
 else:
-    st.info("No significant patterns detected in current data")
+    if single_committee_mode:
+        st.info("No significant patterns detected in current data")
 
 
 # =============================================================================
