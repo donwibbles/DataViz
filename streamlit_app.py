@@ -55,13 +55,60 @@ def load_contribution_data(path_str: str, max_rows: Optional[int] = None) -> pd.
     return df
 
 
-def create_downloadable_chart(fig, title: str):
-    """Display a Plotly chart with download button."""
+def get_filter_context(selected_committees, date_min, date_max, amount_min, amount_max,
+                       contributor_search, selected_states) -> tuple:
+    """Generate filter context for chart titles and filenames."""
+    title_parts = []
+    filename_parts = []
+
+    if selected_committees:
+        if len(selected_committees) == 1:
+            title_parts.append(f"{selected_committees[0]}")
+            filename_parts.append(selected_committees[0].replace(' ', '_').replace(',', ''))
+        else:
+            title_parts.append(f"{len(selected_committees)} Committees")
+            filename_parts.append(f"{len(selected_committees)}_committees")
+
+    if date_min and date_max:
+        if date_min != date_max:
+            title_parts.append(f"{date_min} to {date_max}")
+            filename_parts.append(f"{date_min}_to_{date_max}")
+
+    if amount_min is not None and amount_max is not None:
+        title_parts.append(f"${amount_min:,.0f}-${amount_max:,.0f}")
+        filename_parts.append(f"{int(amount_min)}_to_{int(amount_max)}")
+
+    if contributor_search:
+        title_parts.append(f"'{contributor_search}'")
+        filename_parts.append(contributor_search.replace(' ', '_'))
+
+    if selected_states:
+        if len(selected_states) <= 3:
+            title_parts.append(", ".join(selected_states))
+            filename_parts.append("_".join(selected_states))
+        else:
+            title_parts.append(f"{len(selected_states)} States")
+            filename_parts.append(f"{len(selected_states)}_states")
+
+    title_suffix = f" ({' | '.join(title_parts)})" if title_parts else ""
+    filename_suffix = "_" + "_".join(filename_parts) if filename_parts else ""
+
+    return title_suffix, filename_suffix
+
+
+def create_downloadable_chart(fig, base_title: str, filter_context: tuple = ("", "")):
+    """Display a Plotly chart with download button and filter context in title."""
+    title_suffix, filename_suffix = filter_context
+
+    # Update chart title to include filter context
+    if title_suffix:
+        fig.update_layout(title=fig.layout.title.text + title_suffix)
+
     # Configure chart to show download options
     config = {
         'toImageButtonOptions': {
             'format': 'png',
-            'filename': title.replace(' ', '_').lower(),
+            'filename': base_title.replace(' ', '_').lower() + filename_suffix,
             'height': 800,
             'width': 1200,
             'scale': 2
@@ -228,6 +275,17 @@ if selected_states:
     df = df[df["Contributor State"].isin(selected_states)]
     active_filters.append(f"States: {', '.join(selected_states)}")
 
+# Generate filter context for chart titles and filenames
+filter_context = get_filter_context(
+    selected_committees,
+    date_min,
+    date_max,
+    amount_min,
+    amount_max,
+    contributor_search,
+    selected_states
+)
+
 
 # Display active filters
 if active_filters:
@@ -294,7 +352,7 @@ if not selected_committees and "Recipient Committee" in df.columns and "Amount" 
             labels={"Total Amount": "Total Amount ($)", "Recipient Committee": "Committee"}
         )
         fig.update_layout(height=500)
-        create_downloadable_chart(fig, "contributions_by_committee")
+        create_downloadable_chart(fig, "contributions_by_committee", filter_context)
 
     with col2:
         st.dataframe(
@@ -335,7 +393,7 @@ if "Amount" in df.columns:
             title="Number of Contributions by Amount Range",
             labels={"Count": "Number of Contributions"}
         )
-        create_downloadable_chart(fig, "contribution_count_by_range")
+        create_downloadable_chart(fig, "contribution_count_by_range", filter_context)
 
     with col2:
         fig = px.bar(
@@ -345,7 +403,7 @@ if "Amount" in df.columns:
             title="Total Contribution Amount by Range",
             labels={"Total Amount": "Total Amount ($)"}
         )
-        create_downloadable_chart(fig, "contribution_total_by_range")
+        create_downloadable_chart(fig, "contribution_total_by_range", filter_context)
 
 
 # =============================================================================
@@ -623,7 +681,7 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
             size_max=40
         )
         fig.update_layout(height=600, geo=dict(projection_type="albers usa"))
-        create_downloadable_chart(fig, "us_city_contribution_map")
+        create_downloadable_chart(fig, "us_city_contribution_map", filter_context)
     else:
         st.warning("No city data with known coordinates found for mapping")
 
@@ -678,7 +736,7 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
                 projection_scale=6
             )
             fig.update_layout(height=600)
-            create_downloadable_chart(fig, "california_city_contribution_map")
+            create_downloadable_chart(fig, "california_city_contribution_map", filter_context)
         else:
             st.warning("No California city data with known coordinates found for mapping")
 
@@ -692,7 +750,7 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
             title="Top 15 California Cities by Contribution Amount"
         )
         fig.update_layout(height=500)
-        create_downloadable_chart(fig, "california_cities_bar")
+        create_downloadable_chart(fig, "california_cities_bar", filter_context)
 
 
 # =============================================================================
@@ -726,7 +784,7 @@ with col1:
             labels={"Total Amount": "Total Amount ($)"}
         )
         fig.update_layout(height=500)
-        create_downloadable_chart(fig, "top_cities")
+        create_downloadable_chart(fig, "top_cities", filter_context)
 
 with col2:
     st.subheader("Top 15 States")
@@ -752,7 +810,7 @@ with col2:
             labels={"Total Amount": "Total Amount ($)"}
         )
         fig.update_layout(height=500)
-        create_downloadable_chart(fig, "top_states")
+        create_downloadable_chart(fig, "top_states", filter_context)
 
 
 # =============================================================================
@@ -785,7 +843,7 @@ if "Start Date" in df.columns and "Amount" in df.columns:
                 labels={"Total Amount": "Total Amount ($)"}
             )
             fig.update_traces(line_color='#1f77b4', line_width=2)
-            create_downloadable_chart(fig, "daily_amounts")
+            create_downloadable_chart(fig, "daily_amounts", filter_context)
 
         with col2:
             fig = px.line(
@@ -796,7 +854,7 @@ if "Start Date" in df.columns and "Amount" in df.columns:
                 labels={"Number of Contributions": "Count"}
             )
             fig.update_traces(line_color='#ff7f0e', line_width=2)
-            create_downloadable_chart(fig, "daily_counts")
+            create_downloadable_chart(fig, "daily_counts", filter_context)
 
         # Monthly aggregation
         df_time["Month"] = df_time["Start Date"].dt.to_period('M').astype(str)
@@ -836,7 +894,7 @@ if "Start Date" in df.columns and "Amount" in df.columns:
             hovermode="x unified",
             height=500
         )
-        create_downloadable_chart(fig, "monthly_contributions")
+        create_downloadable_chart(fig, "monthly_contributions", filter_context)
 
 
 # =============================================================================
@@ -888,7 +946,7 @@ with col2:
             title="Top 15 Occupations by Contribution Amount"
         )
         fig.update_layout(height=400)
-        create_downloadable_chart(fig, "top_occupations")
+        create_downloadable_chart(fig, "top_occupations", filter_context)
 
 
 # =============================================================================
