@@ -10,11 +10,19 @@ from .models import Legislator, Bill, Vote
 
 
 def get_supabase_client() -> Optional[Client]:
-    """Get Supabase client with credentials from secrets."""
+    """Get Supabase client with credentials from environment or secrets."""
     try:
-        url = st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL")
-        # Use anon key for public read access (RLS allows it)
-        key = st.secrets.get("SUPABASE_ANON_KEY") or os.environ.get("SUPABASE_ANON_KEY")
+        # Try environment variables first, then secrets
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_ANON_KEY")
+
+        # Fall back to secrets if available
+        if not url or not key:
+            try:
+                url = url or st.secrets.get("SUPABASE_URL")
+                key = key or st.secrets.get("SUPABASE_ANON_KEY")
+            except (FileNotFoundError, KeyError):
+                pass  # Secrets file doesn't exist, that's ok
 
         if not url or not key:
             st.warning("⚠️ Supabase credentials not configured")

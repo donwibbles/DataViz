@@ -4,6 +4,7 @@ Search CA legislators and bills, view voting records
 """
 
 from __future__ import annotations
+import os
 import streamlit as st
 import pandas as pd
 
@@ -24,13 +25,24 @@ st.divider()
 # =============================================================================
 
 with st.expander("📊 Track CA Legislators & Votes", expanded=True):
-    st.markdown("""
-    Search for California state legislators and view their voting records on recent bills.
-    Data sourced from OpenStates API.
-    """)
+    # Check if using Supabase backend
+    use_supabase = os.environ.get('USE_SUPABASE', 'false').lower() == 'true'
 
-    # Check if API key is configured
-    if not st.secrets.get("OPENSTATES_API_KEY") and "openstates_api_key" not in st.session_state:
+    if use_supabase:
+        st.markdown("""
+        Search California state legislators and view their voting records.
+        Data includes 16 years of legislative history (2009-2026) with 4.5M votes.
+        """)
+    else:
+        st.markdown("""
+        Search for California state legislators and view their voting records on recent bills.
+        Data sourced from OpenStates API.
+        """)
+
+    # Check if API key is configured (only needed if not using Supabase)
+    needs_api_key = not use_supabase and not st.secrets.get("OPENSTATES_API_KEY", None) and "openstates_api_key" not in st.session_state
+
+    if needs_api_key:
         st.warning("⚠️ OpenStates API key required")
         st.markdown("""
         To use this feature:
