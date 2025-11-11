@@ -234,32 +234,128 @@ def create_downloadable_chart(fig, base_title: str, filter_context: tuple = ("",
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
-def detect_union_labor(row) -> bool:
-    """Detect if a contribution is from union/labor based on employer/occupation."""
-    # More precise keywords - specific union names and acronyms only
-    union_keywords = [
-        # Union-specific phrases
-        ' union', 'labor union', 'labour union', 'union local', 'trade union',
-        'labor council', 'labour council', 'union member',
-        # Specific major unions and federations
-        'afl-cio', 'seiu', 'teamsters', 'ufcw', 'ibew', 'iatse', 'afscme',
-        'uaw', 'uwua', 'unite here', 'cwa', 'aft', 'nea', 'iue-cwa',
-        # International unions
-        'international brotherhood', 'international union', 'international association',
-        'united association', 'united steelworkers', 'united auto workers',
-        # Specific phrases
-        'nurses union', 'teachers union', 'faculty union', 'employees union',
-        'communication workers', 'postal workers', 'letter carriers',
-        'operating engineers', 'laborers international', 'carpenters union',
-        'electricians union', 'plumbers union', 'pipefitters union'
+def detect_union_labor(row) -> dict:
+    """Detect if a contribution is from union/labor based on employer/occupation.
+
+    Returns:
+        dict with keys:
+            - is_union (bool): Whether this is a union contribution
+            - union_name (str): Specific union identified, if any
+            - confidence (str): 'high', 'medium', or 'low'
+            - category (str): Type of union (public, private, professional, etc.)
+    """
+    import re
+
+    # False positive patterns - exclude these
+    exclusions = [
+        r'\bcredit union\b',
+        r'\bunion bank\b',
+        r'\bunion square\b',
+        r'\bunion city\b',
+        r'\bunion station\b',
+        r'\bunion college\b',
+        r'\bunion university\b',
+        r'\breunion\b',
+        r'\bcommunion\b',
+        r'\bwestern union\b',
+        r'\beuropean union\b',
+        r'\bstudent union\b',
     ]
 
-    employer = str(row.get('Contributor Employer', '')).lower()
-    occupation = str(row.get('Contributor Occupation', '')).lower()
+    # Comprehensive union database with patterns
+    # Format: (pattern, union_name, confidence, category)
+    union_patterns = [
+        # Major federations (high confidence)
+        (r'\bafl-?cio\b', 'AFL-CIO', 'high', 'federation'),
+        (r'\bchange to win\b', 'Change to Win', 'high', 'federation'),
 
+        # Public sector unions (high confidence)
+        (r'\bseiu\b|service employees international', 'SEIU', 'high', 'public'),
+        (r'\bafscme\b|american federation of state', 'AFSCME', 'high', 'public'),
+        (r'\baft\b|american federation of teachers', 'AFT', 'high', 'public'),
+        (r'\bnea\b|national education association', 'NEA', 'high', 'public'),
+        (r'\bcwa\b|communications workers', 'CWA', 'high', 'public'),
+        (r'\bapwu\b|postal workers union', 'APWU', 'high', 'public'),
+        (r'\bnalc\b|letter carriers', 'NALC', 'high', 'public'),
+        (r'\bcna\b|california nurses', 'CNA', 'high', 'public'),
+        (r'\bnnu\b|national nurses united', 'NNU', 'high', 'public'),
+
+        # Private sector / trades (high confidence)
+        (r'\bteamsters\b|ibt\b', 'Teamsters', 'high', 'private'),
+        (r'\buaw\b|united auto workers', 'UAW', 'high', 'private'),
+        (r'\bufcw\b|united food.*commercial', 'UFCW', 'high', 'private'),
+        (r'\bibew\b|electrical workers', 'IBEW', 'high', 'private'),
+        (r'\bliuna\b|laborers.*international', 'LIUNA', 'high', 'private'),
+        (r'\bunite here\b', 'UNITE HERE', 'high', 'private'),
+        (r'\bcarpenters union\b|ubc\b.*carpenters', 'Carpenters Union', 'high', 'private'),
+        (r'\boperating engineers\b|iuoe\b', 'Operating Engineers', 'high', 'private'),
+        (r'\bplumbers.*pipefitters\b|ua\b.*plumbers', 'Plumbers & Pipefitters', 'high', 'private'),
+        (r'\bironworkers\b', 'Ironworkers', 'high', 'private'),
+        (r'\bsheet metal workers\b|smart union', 'Sheet Metal Workers', 'high', 'private'),
+        (r'\bboilermakers\b', 'Boilermakers', 'high', 'private'),
+        (r'\bmachinists\b|iam\b', 'Machinists', 'high', 'private'),
+        (r'\bsteel\s*workers\b|usw\b', 'Steelworkers', 'high', 'private'),
+
+        # Entertainment / professional (high confidence)
+        (r'\biatse\b|theatrical stage', 'IATSE', 'high', 'professional'),
+        (r'\bsag-?aftra\b|screen actors', 'SAG-AFTRA', 'high', 'professional'),
+        (r'\bwriters guild\b|wga\b', 'Writers Guild', 'high', 'professional'),
+        (r'\bdga\b|directors guild', 'Directors Guild', 'high', 'professional'),
+        (r'\bmpeg\b|motion picture editors', 'Motion Picture Editors Guild', 'high', 'professional'),
+        (r'\banimation guild\b', 'Animation Guild', 'high', 'professional'),
+
+        # Union PAC patterns (high confidence)
+        (r'union.*\bpac\b', 'Union PAC', 'high', 'pac'),
+        (r'labor.*\bpac\b', 'Labor PAC', 'high', 'pac'),
+        (r'\bcope\b.*committee', 'COPE', 'high', 'pac'),
+
+        # Generic union patterns with structure indicators (medium confidence)
+        (r'\bunion\s+local\s+\d+', 'Union Local', 'medium', 'generic'),
+        (r'\blocal\s+\d+.*union', 'Union Local', 'medium', 'generic'),
+        (r'international\s+(brotherhood|union|association)\s+of', 'International Union', 'medium', 'generic'),
+        (r'\blabor\s+council\b', 'Labor Council', 'medium', 'council'),
+        (r'\blabour\s+council\b', 'Labour Council', 'medium', 'council'),
+        (r'\btrade.*union\b', 'Trade Union', 'medium', 'generic'),
+        (r'\btrades\s+council\b', 'Trades Council', 'medium', 'council'),
+
+        # Generic occupation-based detection (lower confidence)
+        (r'\bunion\s+(member|representative|organizer|steward)\b', 'Union Member/Staff', 'medium', 'member'),
+        (r'\blabor\s+organizer\b', 'Labor Organizer', 'medium', 'member'),
+    ]
+
+    employer = str(row.get('Contributor Employer', '')).lower().strip()
+    occupation = str(row.get('Contributor Occupation', '')).lower().strip()
+
+    # Check both fields
     combined = f"{employer} {occupation}"
 
-    return any(keyword in combined for keyword in union_keywords)
+    # First check for exclusions
+    for exclusion in exclusions:
+        if re.search(exclusion, combined, re.IGNORECASE):
+            return {
+                'is_union': False,
+                'union_name': None,
+                'confidence': None,
+                'category': None
+            }
+
+    # Check for union patterns
+    for pattern, union_name, confidence, category in union_patterns:
+        if re.search(pattern, combined, re.IGNORECASE):
+            return {
+                'is_union': True,
+                'union_name': union_name,
+                'confidence': confidence,
+                'category': category
+            }
+
+    # No union detected
+    return {
+        'is_union': False,
+        'union_name': None,
+        'confidence': None,
+        'category': None
+    }
 
 
 def generate_smart_insights(df: pd.DataFrame, single_committee_mode: bool = False) -> list:
@@ -333,7 +429,9 @@ def generate_smart_insights(df: pd.DataFrame, single_committee_mode: bool = Fals
 
         # Union/Labor support detection
         if "Contributor Employer" in df.columns or "Contributor Occupation" in df.columns:
-            df['is_union'] = df.apply(detect_union_labor, axis=1)
+            union_data = df.apply(detect_union_labor, axis=1)
+            df['union_info'] = union_data
+            df['is_union'] = union_data.apply(lambda x: x['is_union'])
             union_count = df['is_union'].sum()
             if union_count > 0:
                 union_pct = (union_count / len(df)) * 100
@@ -781,88 +879,6 @@ if insights:
 else:
     if single_committee_mode:
         st.info("No significant patterns detected in current data")
-
-
-# =============================================================================
-# UNION / LABOR SUPPORT ANALYSIS
-# =============================================================================
-with st.expander("✊ Union & Labor Support", expanded=True):
-    if "Contributor Employer" in df.columns or "Contributor Occupation" in df.columns:
-        # Detect union contributions
-        df['is_union'] = df.apply(detect_union_labor, axis=1)
-        union_df = df[df['is_union']]
-
-        if len(union_df) > 0:
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                union_count = len(union_df)
-                union_pct = (union_count / len(df)) * 100
-                st.metric("Union/Labor Contributions", f"{union_count:,}", f"{union_pct:.1f}% of total")
-
-            with col2:
-                union_amount = union_df["Amount"].sum() if "Amount" in df.columns else 0
-                total_amount = df["Amount"].sum() if "Amount" in df.columns else 1
-                union_amount_pct = (union_amount / total_amount) * 100 if total_amount > 0 else 0
-                st.metric("Union/Labor Total $", f"${union_amount:,.2f}", f"{union_amount_pct:.1f}% of total")
-
-            with col3:
-                union_avg = union_df["Amount"].mean() if "Amount" in df.columns and len(union_df) > 0 else 0
-                st.metric("Avg Union Contribution", f"${union_avg:,.2f}")
-
-            st.divider()
-
-            # Top unions/labor organizations
-            col1, col2 = st.columns([2, 1])
-
-            with col1:
-                if len(union_df) > 0:
-                    st.subheader("Top Union/Labor Organizations")
-
-                    # Group by employer
-                    if "Contributor Employer" in union_df.columns:
-                        top_unions = union_df.groupby("Contributor Employer").agg({
-                            "Amount": ["sum", "count"]
-                        }).reset_index()
-                        top_unions.columns = ["Organization", "Total Amount", "Count"]
-                        top_unions = top_unions.sort_values("Total Amount", ascending=False).head(15)
-
-                        fig = px.bar(
-                            top_unions,
-                            x="Total Amount",
-                            y="Organization",
-                            orientation="h",
-                            title="Top 15 Union/Labor Organizations by Contribution Amount"
-                        )
-                        fig.update_layout(height=500)
-                        create_downloadable_chart(fig, "union_labor_orgs", filter_context, "union_orgs")
-
-            with col2:
-                st.subheader("Union vs Non-Union")
-
-                comparison_data = pd.DataFrame({
-                    "Type": ["Union/Labor", "Non-Union"],
-                    "Count": [len(union_df), len(df) - len(union_df)],
-                    "Amount": [
-                        union_df["Amount"].sum() if "Amount" in df.columns else 0,
-                        df[~df['is_union']]["Amount"].sum() if "Amount" in df.columns else 0
-                    ]
-                })
-
-                fig = px.pie(
-                    comparison_data,
-                    values="Amount",
-                    names="Type",
-                    title="Union vs Non-Union Contributions ($)",
-                    color_discrete_sequence=['#2E86AB', '#A23B72']
-                )
-                fig.update_layout(height=400)
-                create_downloadable_chart(fig, "union_vs_nonunion", filter_context, "union_pie")
-
-        else:
-            st.info("No union or labor contributions detected in current data")
-    else:
-        st.warning("Employer/Occupation data not available for union detection")
 
 
 # =============================================================================
@@ -1555,6 +1571,196 @@ with col2:
         )
         fig.update_layout(height=400)
         create_downloadable_chart(fig, "top_occupations", filter_context, "occupations")
+
+
+# =============================================================================
+# UNION / LABOR SUPPORT ANALYSIS
+# =============================================================================
+st.header("✊ Union & Labor Support")
+
+with st.expander("View Union/Labor Analysis", expanded=True):
+    if "Contributor Employer" in df.columns or "Contributor Occupation" in df.columns:
+        # Detect union contributions with enhanced detection
+        union_data = df.apply(detect_union_labor, axis=1)
+        df['union_info'] = union_data
+        df['is_union'] = union_data.apply(lambda x: x['is_union'])
+        df['union_name'] = union_data.apply(lambda x: x['union_name'])
+        df['union_confidence'] = union_data.apply(lambda x: x['confidence'])
+        df['union_category'] = union_data.apply(lambda x: x['category'])
+
+        union_df = df[df['is_union']]
+
+        if len(union_df) > 0:
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                union_count = len(union_df)
+                union_pct = (union_count / len(df)) * 100
+                st.metric("Union/Labor Contributions", f"{union_count:,}", f"{union_pct:.1f}% of total")
+
+            with col2:
+                union_amount = union_df["Amount"].sum() if "Amount" in df.columns else 0
+                total_amount = df["Amount"].sum() if "Amount" in df.columns else 1
+                union_amount_pct = (union_amount / total_amount) * 100 if total_amount > 0 else 0
+                st.metric("Union/Labor Total $", f"${union_amount:,.2f}", f"{union_amount_pct:.1f}% of total")
+
+            with col3:
+                union_avg = union_df["Amount"].mean() if "Amount" in df.columns and len(union_df) > 0 else 0
+                non_union_avg = df[~df['is_union']]["Amount"].mean() if "Amount" in df.columns and len(df[~df['is_union']]) > 0 else 0
+                avg_diff = ((union_avg / non_union_avg - 1) * 100) if non_union_avg > 0 else 0
+                st.metric("Avg Union Contribution", f"${union_avg:,.2f}", f"{avg_diff:+.1f}% vs non-union")
+
+            with col4:
+                high_conf_count = len(union_df[union_df['union_confidence'] == 'high'])
+                high_conf_pct = (high_conf_count / len(union_df)) * 100 if len(union_df) > 0 else 0
+                st.metric("High Confidence", f"{high_conf_count:,}", f"{high_conf_pct:.0f}%")
+
+            st.divider()
+
+            # Category breakdown
+            st.subheader("Union Type Breakdown")
+            col1, col2 = st.columns([1, 1])
+
+            with col1:
+                # Category stats
+                category_stats = union_df.groupby('union_category').agg({
+                    'Amount': ['sum', 'count']
+                }).reset_index()
+                category_stats.columns = ['Category', 'Total Amount', 'Count']
+                category_stats = category_stats.sort_values('Total Amount', ascending=False)
+
+                # Rename categories for display
+                category_names = {
+                    'public': 'Public Sector',
+                    'private': 'Private Sector / Trades',
+                    'professional': 'Professional / Entertainment',
+                    'pac': 'Union PACs',
+                    'federation': 'Labor Federations',
+                    'council': 'Labor Councils',
+                    'generic': 'Other Unions',
+                    'member': 'Union Members'
+                }
+                category_stats['Category'] = category_stats['Category'].map(category_names).fillna(category_stats['Category'])
+
+                fig = px.bar(
+                    category_stats,
+                    x='Total Amount',
+                    y='Category',
+                    orientation='h',
+                    title='Contributions by Union Type',
+                    text='Total Amount'
+                )
+                fig.update_traces(texttemplate='$%{text:,.0f}', textposition='outside')
+                fig.update_layout(height=300, showlegend=False)
+                create_downloadable_chart(fig, "union_categories", filter_context, "union_categories")
+
+            with col2:
+                # Pie chart
+                comparison_data = pd.DataFrame({
+                    "Type": ["Union/Labor", "Non-Union"],
+                    "Count": [len(union_df), len(df) - len(union_df)],
+                    "Amount": [
+                        union_df["Amount"].sum() if "Amount" in df.columns else 0,
+                        df[~df['is_union']]["Amount"].sum() if "Amount" in df.columns else 0
+                    ]
+                })
+
+                fig = px.pie(
+                    comparison_data,
+                    values="Amount",
+                    names="Type",
+                    title="Union vs Non-Union Contributions ($)",
+                    color_discrete_sequence=['#2E86AB', '#A23B72']
+                )
+                fig.update_layout(height=300)
+                create_downloadable_chart(fig, "union_vs_nonunion", filter_context, "union_pie")
+
+            st.divider()
+
+            # Top specific unions identified
+            st.subheader("Top Identified Unions")
+            col1, col2 = st.columns([2, 1])
+
+            with col1:
+                # Group by identified union name
+                union_identified = union_df[union_df['union_name'].notna()]
+                if len(union_identified) > 0:
+                    top_unions = union_identified.groupby('union_name').agg({
+                        'Amount': ['sum', 'count']
+                    }).reset_index()
+                    top_unions.columns = ['Union', 'Total Amount', 'Count']
+                    top_unions = top_unions.sort_values('Total Amount', ascending=False).head(15)
+
+                    fig = px.bar(
+                        top_unions,
+                        x='Total Amount',
+                        y='Union',
+                        orientation='h',
+                        title='Top 15 Identified Unions by Contribution Amount',
+                        hover_data={'Count': True}
+                    )
+                    fig.update_layout(height=500)
+                    create_downloadable_chart(fig, "top_unions_identified", filter_context, "top_unions")
+                else:
+                    st.info("No specific unions identified. Try uploading data with more detailed employer information.")
+
+            with col2:
+                st.subheader("Detection Confidence")
+                conf_stats = union_df.groupby('union_confidence').agg({
+                    'Amount': 'sum'
+                }).reset_index()
+                conf_stats.columns = ['Confidence', 'Amount']
+
+                # Capitalize confidence levels
+                conf_stats['Confidence'] = conf_stats['Confidence'].str.title()
+
+                fig = px.pie(
+                    conf_stats,
+                    values='Amount',
+                    names='Confidence',
+                    title='Detection Confidence ($)',
+                    color_discrete_map={'High': '#28a745', 'Medium': '#ffc107', 'Low': '#dc3545'}
+                )
+                fig.update_layout(height=300)
+                create_downloadable_chart(fig, "union_confidence", filter_context, "union_confidence")
+
+            # Time series if dates available
+            if "Start Date" in union_df.columns and union_df["Start Date"].notna().sum() > 0:
+                st.divider()
+                st.subheader("Union Contributions Over Time")
+
+                union_ts = union_df[union_df["Start Date"].notna()].copy()
+                union_ts['Month'] = union_ts['Start Date'].dt.to_period('M').dt.to_timestamp()
+
+                time_comparison = pd.DataFrame()
+                # Union contributions over time
+                union_monthly = union_ts.groupby('Month')['Amount'].sum().reset_index()
+                union_monthly['Type'] = 'Union/Labor'
+
+                # Non-union contributions over time
+                non_union_ts = df[~df['is_union']][df["Start Date"].notna()].copy()
+                non_union_ts['Month'] = non_union_ts['Start Date'].dt.to_period('M').dt.to_timestamp()
+                non_union_monthly = non_union_ts.groupby('Month')['Amount'].sum().reset_index()
+                non_union_monthly['Type'] = 'Non-Union'
+
+                time_comparison = pd.concat([union_monthly, non_union_monthly])
+
+                fig = px.line(
+                    time_comparison,
+                    x='Month',
+                    y='Amount',
+                    color='Type',
+                    title='Union vs Non-Union Contributions Over Time',
+                    markers=True
+                )
+                fig.update_layout(height=400)
+                create_downloadable_chart(fig, "union_timeline", filter_context, "union_timeline")
+
+        else:
+            st.info("No union or labor contributions detected in current data")
+    else:
+        st.warning("Employer/Occupation data not available for union detection")
 
 
 # =============================================================================
