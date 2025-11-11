@@ -91,45 +91,163 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                         key="vote_name_search"
                     )
 
-                # Show selected legislator's votes (if one is selected)
+                # Show selected legislator's profile (if one is selected)
                 if "selected_legislator" in st.session_state and st.session_state.selected_legislator:
+                    from openstates import (
+                        fetch_legislator_votes, fetch_authored_bills,
+                        get_legislator_sessions, get_legislator_stats
+                    )
+
                     st.divider()
-                    st.subheader(f"📋 Voting Record: {st.session_state.selected_legislator_name}")
 
-                    from openstates import fetch_legislator_votes
-
-                    # Add session filter for votes
-                    col_vote1, col_vote2 = st.columns([3, 1])
-                    with col_vote1:
-                        st.markdown("Recent votes across all sessions (showing up to 200 most recent)")
-                    with col_vote2:
-                        if st.button("← Back to search", key="back_from_votes"):
+                    # Header with back button
+                    col_header1, col_header2 = st.columns([4, 1])
+                    with col_header1:
+                        st.subheader(f"📋 {st.session_state.selected_legislator_name}")
+                        # Show legislator details if available
+                        if "selected_legislator_details" in st.session_state:
+                            leg = st.session_state.selected_legislator_details
+                            st.caption(f"{leg.party} • {leg.chamber} • District {leg.district}")
+                    with col_header2:
+                        if st.button("← Back", key="back_from_profile"):
                             del st.session_state.selected_legislator
                             del st.session_state.selected_legislator_name
+                            if "selected_legislator_details" in st.session_state:
+                                del st.session_state.selected_legislator_details
                             st.rerun()
 
-                    with st.spinner("Loading voting record..."):
-                        votes = fetch_legislator_votes(st.session_state.selected_legislator)
+                    # Load stats
+                    with st.spinner("Loading legislator stats..."):
+                        stats = get_legislator_stats(st.session_state.selected_legislator)
+
+                    # Stats Overview
+                    if stats:
+                        st.markdown("### Quick Stats")
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("📝 Bills Authored", stats.get('authored', 0))
+                        with col2:
+                            st.metric("🗳️ Total Votes", stats.get('votes', 0))
+                        with col3:
+                            st.metric("🌾 Ag Bill Votes", stats.get('ag_votes', 0))
+                        with col4:
+                            ag_pct = (stats.get('ag_votes', 0) / stats.get('votes', 1) * 100) if stats.get('votes', 0) > 0 else 0
+                            st.metric("🌾 Ag Vote %", f"{ag_pct:.1f}%")
+
+                        st.divider()
+
+                    # Authored Bills Section (Collapsible)
+                    with st.expander(f"📝 Authored/Sponsored Bills ({stats.get('authored', 0)})", expanded=False):
+                        if stats.get('authored', 0) > 0:
+                            with st.spinner("Loading authored bills..."):
+                                authored_bills = fetch_authored_bills(st.session_state.selected_legislator)
+
+                            if authored_bills:
+                                # Search box for authored bills
+                                search_authored = st.text_input("Search authored bills", key="search_authored", placeholder="Search by bill number or title...")
+
+                                # Filter authored bills
+                                filtered_authored = authored_bills
+                                if search_authored:
+                                    filtered_authored = [
+                                        b for b in authored_bills
+                                        if search_authored.lower() in b.bill_number.lower() or
+                                           search_authored.lower() in b.title.lower()
+                                    ]
+
+                                if filtered_authored:
+                                    st.caption(f"Showing {len(filtered_authored)} of {len(authored_bills)} bills")
+
+                                    for bill in filtered_authored[:50]:  # Limit display
+                                        ag_icon = " 🌾" if hasattr(bill, 'is_agricultural') and bill.is_agricultural else ""
+                                        st.markdown(f"**{bill.bill_number}**{ag_icon} - {bill.title}")
+                                        st.caption(f"📅 {bill.session} • {bill.status}")
+                                        st.divider()
+
+                                    if len(filtered_authored) > 50:
+                                        st.info(f"Showing first 50 of {len(filtered_authored)} bills")
+                                else:
+                                    st.info("No bills match your search")
+                            else:
+                                st.info("No authored bills found")
+                        else:
+                            st.info("This legislator has not authored any bills in the database")
+
+                    st.divider()
+
+                    # Voting Record Section (Always visible)
+                    st.markdown("### 🗳️ Voting Record")
+
+                    # Get sessions for this legislator
+                    sessions = get_legislator_sessions(st.session_state.selected_legislator)
+
+                    # Session picker and search
+                    col_filter1, col_filter2 = st.columns([1, 2])
+                    with col_filter1:
+                        session_options = ["All Sessions"] + sessions
+                        selected_session = st.selectbox(
+                            "Session",
+                            session_options,
+                            key="vote_session_filter"
+                        )
+                    with col_filter2:
+                        vote_search = st.text_input(
+                            "Search votes by bill number or title",
+                            key="vote_search",
+                            placeholder="e.g. AB 123 or 'farm worker'"
+                        )
+
+                    # Load votes based on session
+                    session_param = None if selected_session == "All Sessions" else selected_session
+
+                    with st.spinner("Loading votes..."):
+                        if session_param:
+                            # Load all votes for single session (no limit)
+                            votes = fetch_legislator_votes(
+                                st.session_state.selected_legislator,
+                                session=session_param
+                            )
+                        else:
+                            # Load first 500 for all sessions
+                            votes = fetch_legislator_votes(
+                                st.session_state.selected_legislator,
+                                limit=500
+                            )
 
                     if votes:
-                        st.success(f"Found {len(votes)} votes")
+                        # Filter votes by search
+                        filtered_votes = votes
+                        if vote_search:
+                            filtered_votes = [
+                                v for v in votes
+                                if vote_search.lower() in v.bill_number.lower() or
+                                   vote_search.lower() in v.bill_title.lower()
+                            ]
 
-                        # Create DataFrame
+                        st.success(f"Found {len(filtered_votes)} votes" + (f" (filtered from {len(votes)})" if vote_search else ""))
+
+                        # Create DataFrame with agricultural indicator
                         vote_data = []
-                        for vote in votes:
+                        for vote in filtered_votes:
+                            ag_icon = "🌾" if hasattr(vote, 'is_agricultural') and vote.is_agricultural else ""
                             vote_data.append({
                                 "Bill": vote.bill_number,
                                 "Title": vote.bill_title[:60] + "..." if len(vote.bill_title) > 60 else vote.bill_title,
                                 "Vote": vote.vote_type,
                                 "Date": vote.vote_date,
-                                "Session": vote.session
+                                "Session": vote.session,
+                                "🌾": ag_icon
                             })
 
                         votes_df = pd.DataFrame(vote_data)
                         st.dataframe(votes_df, use_container_width=True, hide_index=True)
+
+                        # Show "Load More" button if showing all sessions and there might be more
+                        if session_param is None and len(votes) == 500:
+                            st.info("💡 Showing first 500 votes across all sessions. Select a specific session to see all votes for that session.")
                     else:
                         st.warning(f"No votes found for {st.session_state.selected_legislator_name}")
-                        st.info("This could mean the legislator hasn't voted on any bills in the database, or there may be a data issue.")
+                        st.info("This could mean the legislator hasn't voted on any bills in the database.")
 
                 else:
                     # Show search interface only if no legislator is selected
@@ -179,9 +297,10 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                                             st.caption(f"📧 {legislator.email}")
 
                                     with col_b:
-                                        if st.button("View Votes", key=f"view_votes_{legislator.id}"):
+                                        if st.button("View Profile", key=f"view_votes_{legislator.id}"):
                                             st.session_state.selected_legislator = legislator.id
                                             st.session_state.selected_legislator_name = legislator.name
+                                            st.session_state.selected_legislator_details = legislator
                                             st.rerun()
 
                                     st.divider()

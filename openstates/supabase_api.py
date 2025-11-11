@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict
 import streamlit as st
 from supabase import create_client, Client
 
@@ -94,7 +94,9 @@ def fetch_legislators(
 
 def fetch_legislator_votes(
     legislator_id: str,
-    session: Optional[str] = None
+    session: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0
 ) -> List[Vote]:
     """
     Fetch voting record for a specific legislator from Supabase.
@@ -102,6 +104,8 @@ def fetch_legislator_votes(
     Args:
         legislator_id: Legislator ID
         session: Optional legislative session filter (e.g., "2025-2026")
+        limit: Optional limit on number of votes (None = no limit)
+        offset: Offset for pagination (default 0)
 
     Returns:
         List of Vote objects
@@ -113,10 +117,13 @@ def fetch_legislator_votes(
     try:
         # Query votes with bill information (including session from bills table)
         query = supabase.table('votes') \
-            .select('*, bills(bill_number, title, session_name)') \
+            .select('*, bills(bill_number, title, session_name, agricultural_tags)') \
             .eq('legislator_id', legislator_id) \
-            .order('vote_date', desc=True) \
-            .limit(200)
+            .order('vote_date', desc=True)
+
+        # Apply limit and offset if specified
+        if limit:
+            query = query.limit(limit).range(offset, offset + limit - 1)
 
         response = query.execute()
 
@@ -142,6 +149,11 @@ def fetch_legislator_votes(
                 session=bill_session,
                 passed=row.get('passed', False)
             )
+
+            # Add agricultural flag if present
+            if bill_info.get('agricultural_tags'):
+                vote.is_agricultural = bill_info['agricultural_tags'].get('is_agricultural', False)
+
             votes.append(vote)
 
         return votes
@@ -310,3 +322,144 @@ def fetch_bill_details(bill_id: str) -> Optional[Bill]:
     except Exception as e:
         st.error(f"Error fetching bill details: {e}")
         return None
+
+
+def fetch_authored_bills(legislator_id: str, session: Optional[str] = None) -> List[Bill]:
+    """
+    Fetch bills authored (primary sponsor) by a specific legislator.
+
+    Args:
+        legislator_id: Legislator ID
+        session: Optional session filter (e.g., "2025-2026")
+
+    Returns:
+        List of Bill objects
+    """
+    supabase = get_supabase_client()
+    if not supabase:
+        return []
+
+    try:
+        # Query bills where legislator is author
+        query = supabase.table('bill_authors') \
+            .select('bills(id, bill_number, title, session_name, status, last_action_date, agricultural_tags)') \
+            .eq('legislator_id', legislator_id) \
+            .order('bills(last_action_date)', desc=True)
+
+        response = query.execute()
+
+        bills = []
+        for row in response.data:
+            bill_data = row.get('bills')
+            if not bill_data:
+                continue
+
+            # Filter by session if specified
+            if session and bill_data.get('session_name') != session:
+                continue
+
+            bill = Bill(
+                id=bill_data['id'],
+                bill_number=bill_data['bill_number'],
+                title=bill_data['title'],
+                authors=[],  # Don't need full author list here
+                session=bill_data.get('session_name', ''),
+                status=bill_data.get('status', 'Unknown'),
+                last_action='',
+                last_action_date=bill_data.get('last_action_date', '')
+            )
+
+            # Add agricultural flag
+            if bill_data.get('agricultural_tags'):
+                bill.is_agricultural = bill_data['agricultural_tags'].get('is_agricultural', False)
+
+            bills.append(bill)
+
+        return bills
+
+    except Exception as e:
+        st.error(f"Error fetching authored bills: {e}")
+        return []
+
+
+def get_legislator_sessions(legislator_id: str) -> List[str]:
+    """
+    Get list of sessions where a legislator has votes.
+
+    Args:
+        legislator_id: Legislator ID
+
+    Returns:
+        List of session names, most recent first
+    """
+    supabase = get_supabase_client()
+    if not supabase:
+        return []
+
+    try:
+        # Query distinct sessions from bills that have votes from this legislator
+        response = supabase.table('votes') \
+            .select('bills(session_name)') \
+            .eq('legislator_id', legislator_id) \
+            .execute()
+
+        # Extract unique session names
+        sessions = set()
+        for row in response.data:
+            bill_info = row.get('bills', {})
+            if bill_info and bill_info.get('session_name'):
+                sessions.add(bill_info['session_name'])
+
+        # Sort most recent first
+        session_list = sorted(list(sessions), reverse=True)
+        return session_list
+
+    except Exception as e:
+        st.error(f"Error fetching legislator sessions: {e}")
+        return []
+
+
+def get_legislator_stats(legislator_id: str) -> Dict:
+    """
+    Get summary statistics for a legislator.
+
+    Args:
+        legislator_id: Legislator ID
+
+    Returns:
+        Dict with counts: authored, cosponsored, votes, ag_votes
+    """
+    supabase = get_supabase_client()
+    if not supabase:
+        return {}
+
+    try:
+        stats = {}
+
+        # Count authored bills
+        authored = supabase.table('bill_authors') \
+            .select('bills(id)', count='exact') \
+            .eq('legislator_id', legislator_id) \
+            .execute()
+        stats['authored'] = authored.count if hasattr(authored, 'count') else 0
+
+        # Count votes
+        votes = supabase.table('votes') \
+            .select('id', count='exact') \
+            .eq('legislator_id', legislator_id) \
+            .execute()
+        stats['votes'] = votes.count if hasattr(votes, 'count') else 0
+
+        # Count agricultural bill votes
+        ag_votes = supabase.table('votes') \
+            .select('*, bills!inner(agricultural_tags)') \
+            .eq('legislator_id', legislator_id) \
+            .not_.is_('bills.agricultural_tags', 'null') \
+            .execute()
+        stats['ag_votes'] = len(ag_votes.data) if ag_votes.data else 0
+
+        return stats
+
+    except Exception as e:
+        st.error(f"Error fetching legislator stats: {e}")
+        return {}
