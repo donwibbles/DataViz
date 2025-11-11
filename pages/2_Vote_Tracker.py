@@ -134,6 +134,7 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                                         if st.button("View Votes", key=f"view_votes_{legislator.id}"):
                                             st.session_state.selected_legislator = legislator.id
                                             st.session_state.selected_legislator_name = legislator.name
+                                            st.rerun()
 
                                     st.divider()
 
@@ -150,9 +151,22 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
 
                     from openstates import fetch_legislator_votes
 
-                    votes = fetch_legislator_votes(st.session_state.selected_legislator)
+                    # Add session filter for votes
+                    col_vote1, col_vote2 = st.columns([3, 1])
+                    with col_vote1:
+                        st.markdown("Recent votes across all sessions (showing up to 200 most recent)")
+                    with col_vote2:
+                        if st.button("← Back to search", key="back_from_votes"):
+                            del st.session_state.selected_legislator
+                            del st.session_state.selected_legislator_name
+                            st.rerun()
+
+                    with st.spinner("Loading voting record..."):
+                        votes = fetch_legislator_votes(st.session_state.selected_legislator)
 
                     if votes:
+                        st.success(f"Found {len(votes)} votes")
+
                         # Create DataFrame
                         vote_data = []
                         for vote in votes:
@@ -161,23 +175,14 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
                                 "Title": vote.bill_title[:60] + "..." if len(vote.bill_title) > 60 else vote.bill_title,
                                 "Vote": vote.vote_type,
                                 "Date": vote.vote_date,
-                                "Result": "Passed" if vote.passed else "Failed"
+                                "Session": vote.session
                             })
 
                         votes_df = pd.DataFrame(vote_data)
                         st.dataframe(votes_df, use_container_width=True, hide_index=True)
                     else:
-                        st.info("📝 Vote data coming soon. The OpenStates API requires additional parsing for individual legislator votes.")
-                        st.markdown("""
-                        **Next steps:**
-                        - Search for bills to see vote breakdowns
-                        - Individual vote tracking will be added in the next update
-                        """)
-
-                    if st.button("← Back to search"):
-                        del st.session_state.selected_legislator
-                        del st.session_state.selected_legislator_name
-                        st.rerun()
+                        st.warning(f"No votes found for {st.session_state.selected_legislator_name}")
+                        st.info("This could mean the legislator hasn't voted on any bills in the database, or there may be a data issue.")
 
             with tab2:
                 st.subheader("Search California Bills")

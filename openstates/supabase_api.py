@@ -94,14 +94,14 @@ def fetch_legislators(
 
 def fetch_legislator_votes(
     legislator_id: str,
-    session: str = "2023-2024"
+    session: Optional[str] = None
 ) -> List[Vote]:
     """
     Fetch voting record for a specific legislator from Supabase.
 
     Args:
         legislator_id: Legislator ID
-        session: Legislative session (e.g., "2023-2024")
+        session: Optional legislative session filter (e.g., "2025-2026")
 
     Returns:
         List of Vote objects
@@ -111,19 +111,27 @@ def fetch_legislator_votes(
         return []
 
     try:
-        # Query votes with bill information
-        response = supabase.table('votes') \
-            .select('*, bills(bill_number, title)') \
+        # Query votes with bill information (including session from bills table)
+        query = supabase.table('votes') \
+            .select('*, bills(bill_number, title, session_name)') \
             .eq('legislator_id', legislator_id) \
-            .eq('session', session) \
             .order('vote_date', desc=True) \
-            .limit(100) \
-            .execute()
+            .limit(200)
+
+        response = query.execute()
 
         # Convert to Vote objects
         votes = []
         for row in response.data:
             bill_info = row.get('bills', {})
+            if not bill_info:
+                continue
+
+            # Filter by session if specified
+            bill_session = bill_info.get('session_name', '')
+            if session and bill_session != session:
+                continue
+
             vote = Vote(
                 legislator_id=row['legislator_id'],
                 bill_id=row['bill_id'],
@@ -131,7 +139,7 @@ def fetch_legislator_votes(
                 bill_title=bill_info.get('title', 'Unknown'),
                 vote_type=row['vote_type'],
                 vote_date=row.get('vote_date', ''),
-                session=row['session'],
+                session=bill_session,
                 passed=row.get('passed', False)
             )
             votes.append(vote)
