@@ -35,7 +35,11 @@ import sys
 import argparse
 from typing import Optional, List, Dict
 from supabase import create_client, Client
-from openstates.agricultural_classifier import classify_agricultural_bill
+from openstates.agricultural_classifier import (
+    AGRICULTURAL_CATEGORIES,
+    AGRICULTURAL_PRIORITIES,
+    classify_agricultural_bill,
+)
 
 
 def get_supabase_admin_client() -> Optional[Client]:
@@ -122,8 +126,8 @@ def classify_and_update_bills(
         'agricultural': 0,
         'not_agricultural': 0,
         'errors': 0,
-        'by_priority': {'high': 0, 'medium': 0, 'low': 0},
-        'by_category': {}
+        'by_priority': {priority: 0 for priority in AGRICULTURAL_PRIORITIES},
+        'by_category': {category: 0 for category in AGRICULTURAL_CATEGORIES},
     }
 
     print(f"🔍 Classifying {len(bills)} bills...")
@@ -146,7 +150,9 @@ def classify_and_update_bills(
 
                 # Count categories
                 for category in classification['categories']:
-                    stats['by_category'][category] = stats['by_category'].get(category, 0) + 1
+                    if category not in stats['by_category']:
+                        stats['by_category'][category] = 0
+                    stats['by_category'][category] += 1
 
                 # Show sample of tagged bills
                 if stats['agricultural'] <= 10:

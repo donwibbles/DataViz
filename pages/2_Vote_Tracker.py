@@ -6,7 +6,6 @@ Search CA legislators and bills, view voting records
 from __future__ import annotations
 import os
 import streamlit as st
-import pandas as pd
 
 # Page config
 st.set_page_config(
@@ -25,38 +24,25 @@ st.divider()
 # =============================================================================
 
 with st.expander("📊 Track CA Legislators & Votes", expanded=True):
-    # Check if using Supabase backend
-    use_supabase = os.environ.get('USE_SUPABASE', 'false').lower() == 'true'
+    st.markdown("""
+    Search California state legislators and view their voting records.
+    All data is served directly from Supabase, which mirrors California legislative history.
+    """)
 
-    if use_supabase:
+    try:
+        secrets = st.secrets
+    except (FileNotFoundError, AttributeError):
+        secrets = {}
+
+    supabase_url = os.environ.get("SUPABASE_URL") or secrets.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_ANON_KEY") or secrets.get("SUPABASE_ANON_KEY")
+    missing_supabase_credentials = not supabase_url or not supabase_key
+
+    if missing_supabase_credentials:
+        st.warning("⚠️ Supabase credentials required")
         st.markdown("""
-        Search California state legislators and view their voting records.
-        Data includes 16 years of legislative history (2009-2026) with 4.5M votes.
+        Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to your environment or Streamlit secrets to continue.
         """)
-    else:
-        st.markdown("""
-        Search for California state legislators and view their voting records on recent bills.
-        Data sourced from OpenStates API.
-        """)
-
-    # Check if API key is configured (only needed if not using Supabase)
-    needs_api_key = not use_supabase and not st.secrets.get("OPENSTATES_API_KEY", None) and "openstates_api_key" not in st.session_state
-
-    if needs_api_key:
-        st.warning("⚠️ OpenStates API key required")
-        st.markdown("""
-        To use this feature:
-        1. Get a free API key at [OpenStates.org](https://openstates.org/accounts/signup/)
-        2. Add to Railway environment variables: `OPENSTATES_API_KEY`
-
-        Or enter temporarily below:
-        """)
-
-        temp_key = st.text_input("Enter API Key (temporary)", type="password", key="temp_api_key")
-        if temp_key:
-            st.session_state.openstates_api_key = temp_key
-            st.success("✅ API key set for this session")
-            st.rerun()
     else:
         # Import vote tracker module
         try:
@@ -509,12 +495,12 @@ with st.expander("📊 Track CA Legislators & Votes", expanded=True):
 with st.sidebar:
     st.markdown("## About Vote Tracker")
     st.markdown("""
-    Track California state legislators and their voting records using data from OpenStates.
+    Track California state legislators and their voting records using Supabase-hosted legislative data.
 
     **Features:**
     - Search by legislator name, party, chamber
     - Search bills by number or keyword
-    - View voting records (coming soon)
+    - View authored bills and voting timelines
     - Filter by legislative session
     """)
 
@@ -522,8 +508,7 @@ with st.sidebar:
 
     st.markdown("## Data Source")
     st.markdown("""
-    Data provided by [OpenStates](https://openstates.org/),
-    a nonprofit providing legislative data for all 50 states.
+    Data served from the project's Supabase instance, mirroring California legislative history from 2009 onward.
     """)
 
     st.divider()

@@ -164,6 +164,17 @@ EXCLUSION_KEYWORDS = [
     r'\bgenetically modified\b',
 ]
 
+AGRICULTURAL_CATEGORIES = [
+    'farm_worker_rights',
+    'safety',
+    'union_organizing',
+    'wages',
+    'immigration',
+    'working_conditions',
+]
+
+AGRICULTURAL_PRIORITIES = ['high', 'medium', 'low']
+
 
 # =============================================================================
 # CLASSIFICATION LOGIC

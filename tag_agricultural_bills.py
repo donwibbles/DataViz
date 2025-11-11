@@ -49,19 +49,15 @@ import argparse
 from datetime import datetime
 from typing import Optional, List, Dict
 from supabase import create_client, Client
+from openstates.agricultural_classifier import (
+    AGRICULTURAL_CATEGORIES,
+    AGRICULTURAL_PRIORITIES,
+)
 
 
 # Valid categories and priorities
-VALID_CATEGORIES = [
-    'farm_worker_rights',
-    'safety',
-    'union_organizing',
-    'wages',
-    'immigration',
-    'working_conditions'
-]
-
-VALID_PRIORITIES = ['high', 'medium', 'low']
+VALID_CATEGORIES = AGRICULTURAL_CATEGORIES
+VALID_PRIORITIES = AGRICULTURAL_PRIORITIES
 
 
 def get_supabase_admin_client() -> Optional[Client]:

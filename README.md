@@ -1,22 +1,76 @@
-# CSV Visualization Helper
+# DataViz Toolkit
 
-`visualizer.py` is a lightweight command-line helper that can peek into very large CSV files,
-sample rows, and generate interactive Plotly charts (line, bar, scatter, histogram) saved as a
-self-contained HTML file.
+Streamlit dashboards, CLI helpers, and Supabase import scripts for exploring California
+legislative data (campaign finance, vote tracking, agricultural tagging, and CSV analysis).
 
-You can also explore the same workflow in the browser via `streamlit_app.py`, a Streamlit UI that wraps the
-CLI logic.
+The repository contains:
 
-## Setup
+- `Home.py` and `pages/` – the multipage Streamlit application.
+- `visualizer.py` – CLI helper that samples large CSV files and produces Plotly charts.
+- `import_legiscan_data*.py` – scripts that ingest LegiScan datasets into Supabase.
+- `openstates/agricultural_classifier.py` plus supporting scripts for automated bill tagging.
+
+## Quick Start
 
 ```bash
-cd csv_viz_tool
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
-pip install -r requirements.txt
+streamlit run Home.py
 ```
 
-## Usage
+Run the Streamlit app from the project root with your Supabase environment variables exported
+(`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, etc.).
+
+## Development Environment
+
+### Requirements
+
+- macOS (Intel or Apple Silicon) or Linux
+- Python **3.13** (python.org universal2 build recommended on macOS)
+- Supabase project credentials for data access
+
+### Setup
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# quick sanity check – this previously segfaulted on some machines
+python -c "import pandas; import pyarrow; print('imports ok')"
+
+# run the automated tests
+pytest
+```
+
+Place any LegiScan dataset dumps under `legiscan_ca_data/` so the import scripts can discover
+them, then run (for example):
+
+```bash
+python import_legiscan_data_v2.py --base-dir legiscan_ca_data/CA
+```
+
+### Apple Silicon / macOS Notes
+
+- Use the official Python 3.13 universal2 installer from python.org. Homebrew’s latest Python can
+  lag behind or miss Arm wheels for pandas/pyarrow.
+- If you see a segfault during `python -c "import pandas"`, pin to the most stable Arm wheels:
+  `pip install --force-reinstall "pandas==2.2.3" "numpy==1.26.4" "pyarrow==16.1.0"`.
+- Keep Xcode Command Line Tools (`xcode-select --install`) up to date so cryptography and reportlab
+  can compile native extensions when wheels are unavailable.
+- When the pip cache causes permission warnings, clear it via `rm -rf ~/Library/Caches/pip` or run
+  `PIP_NO_CACHE_DIR=1 pip install ...`.
+
+## Testing
+
+`pytest` covers the CSV visualizer sampling logic and the shared importer utilities. Add new tests
+alongside the corresponding modules (e.g., `tests/test_import_utils.py`). Run the suite after any
+changes to classifiers, data loaders, or CLI parsing:
+
+```bash
+pytest
+```
+
+## CSV Visualizer CLI
 
 ```bash
 python visualizer.py /path/to/data.csv \
@@ -31,37 +85,10 @@ python visualizer.py /path/to/data.csv \
 
 Key options:
 
-- `--chart` : `line` (default), `bar`, `scatter`, `hist`.
-- `--x-column` / `--value-columns`: define axes/series. For histograms you can omit `--x-column` and
-  only pass `--value-columns`.
-- `--max-rows`: upper bound for rows kept via reservoir sampling (keeps memory flat even for huge
-  files). Use `--no-sampling` if you truly need every row and your machine can fit it.
-- `--chunk-size`: how many rows to stream per pass when sampling.
-- `--datetime-columns`: names that pandas should parse as datetimes.
-- `--delimiter`, `--encoding`: tweak parsing for TSVs or non-UTF8 data.
-- `--open-browser`: automatically open the generated HTML.
+- `--chart`: `line` (default), `bar`, `scatter`, `hist`.
+- `--max-rows`: upper bound for rows kept via reservoir sampling.
+- `--chunk-size`: number of rows streamed per chunk while sampling.
+- `--datetime-columns`: columns pandas should parse as datetimes.
+- `--open-browser`: automatically launch the resulting Plotly HTML.
 
-The script prints where it saved the chart (default `chart.html`). Because Plotly writes standalone
-HTML, you can share or host the output without additional assets.
-
-## Streamlit App
-
-To work in the browser instead of the CLI:
-
-```bash
-streamlit run streamlit_app.py
-```
-
-The sidebar lets you upload a CSV (or point to a path on disk), tweak sampling options, and choose
-chart settings. Use the **Filter rows** expander to constrain numeric ranges or pick categorical
-values (filters are applied after sampling). Once the chart renders you can download the standalone
-HTML straight from the app or explore the sampled data table.
-
-## Testing
-
-Lightweight pytest coverage ensures the sampling logic keeps working for both the CLI and the
-Streamlit UI:
-
-```bash
-python -m pytest
-```
+Because Plotly writes standalone HTML, the output can be shared or hosted without extra assets.

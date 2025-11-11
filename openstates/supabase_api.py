@@ -212,21 +212,43 @@ def search_bills(
         return []
 
     try:
-        # Build query using session_name, include authors
-        db_query = supabase.table('bills').select('*, bill_authors(legislator_id, legislators(name, is_committee))').eq('session_name', session)
+        def _base_query():
+            query_builder = supabase.table('bills') \
+                .select('*, bill_authors(legislator_id, legislators(name, is_committee))') \
+                .eq('session_name', session)
 
-        # Search by bill number or title
+            if subject:
+                query_builder = query_builder.contains('subjects', [subject])
+
+            return query_builder
+
+        bills_data = []
+
         if query:
-            # Try exact bill number match first
-            bill_num_response = db_query.ilike('bill_number', f'%{query}%').limit(50).execute()
-            if bill_num_response.data:
-                bills_data = bill_num_response.data
-            else:
-                # Search in title
-                bills_data = db_query.ilike('title', f'%{query}%').limit(50).execute().data
+            # Bill number lookup
+            bill_num_response = _base_query() \
+                .ilike('bill_number', f'%{query}%') \
+                .order('last_action_date', desc=True) \
+                .limit(50) \
+                .execute()
+
+            bills_data = bill_num_response.data or []
+
+            if not bills_data:
+                # Rebuild the query for title search to avoid bill_number filters leaking through
+                title_response = _base_query() \
+                    .ilike('title', f'%{query}%') \
+                    .order('last_action_date', desc=True) \
+                    .limit(50) \
+                    .execute()
+                bills_data = title_response.data or []
         else:
             # No query, just get recent bills
-            bills_data = db_query.order('last_action_date', desc=True).limit(50).execute().data
+            bills_data = _base_query() \
+                .order('last_action_date', desc=True) \
+                .limit(50) \
+                .execute() \
+                .data
 
         # Convert to Bill objects
         bills = []
@@ -245,7 +267,7 @@ def search_bills(
                 bill_number=row['bill_number'],
                 title=row['title'],
                 authors=authors,
-                session=row['session'],
+                session=row.get('session_name') or row.get('session', ''),
                 status=row.get('status', 'Unknown'),
                 last_action=row.get('last_action', ''),
                 last_action_date=row.get('last_action_date', '')
@@ -365,7 +387,7 @@ def fetch_authored_bills(legislator_id: str, session: Optional[str] = None) -> L
                 authors=[],  # Don't need full author list here
                 session=bill_data.get('session_name', ''),
                 status=bill_data.get('status', 'Unknown'),
-                last_action='',
+                last_action=bill_data.get('last_action', ''),
                 last_action_date=bill_data.get('last_action_date', '')
             )
 
