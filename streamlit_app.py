@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -8,6 +10,19 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import (
+    Image,
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 
@@ -192,13 +207,19 @@ def get_filter_context(selected_committees, date_min, date_max, amount_min, amou
     return title_suffix, filename_suffix
 
 
-def create_downloadable_chart(fig, base_title: str, filter_context: tuple = ("", "")):
+def create_downloadable_chart(fig, base_title: str, filter_context: tuple = ("", ""), chart_key: str = None):
     """Display a Plotly chart with download button and filter context in title."""
     title_suffix, filename_suffix = filter_context
 
     # Update chart title to include filter context
     if title_suffix:
         fig.update_layout(title=fig.layout.title.text + title_suffix)
+
+    # Store figure in session state for PDF export
+    if chart_key:
+        if "pdf_charts" not in st.session_state:
+            st.session_state.pdf_charts = {}
+        st.session_state.pdf_charts[chart_key] = fig
 
     # Configure chart to show download options
     config = {
@@ -211,6 +232,88 @@ def create_downloadable_chart(fig, base_title: str, filter_context: tuple = ("",
         }
     }
     st.plotly_chart(fig, use_container_width=True, config=config)
+
+
+def generate_pdf_report(
+    selected_charts: dict,
+    summary_stats: dict,
+    filter_info: str,
+    chart_figures: dict
+) -> bytes:
+    """Generate a PDF report with selected charts and summary statistics."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    story = []
+    styles = getSampleStyleSheet()
+
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#1f77b4'),
+        spaceAfter=30,
+    )
+
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=colors.HexColor('#2c3e50'),
+        spaceAfter=12,
+    )
+
+    # Title Page
+    story.append(Paragraph("Campaign Contribution Analysis Report", title_style))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
+    if filter_info:
+        story.append(Spacer(1, 0.2 * inch))
+        story.append(Paragraph(f"<b>Filters Applied:</b> {filter_info}", styles['Normal']))
+    story.append(Spacer(1, 0.3 * inch))
+
+    # Summary Statistics Table
+    story.append(Paragraph("Summary Statistics", heading_style))
+
+    summary_data = [[k, v] for k, v in summary_stats.items()]
+    summary_table = Table(summary_data, colWidths=[3 * inch, 3 * inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f0f0f0')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('GRID', (0, 0), (-1, -1), 1, colors.white),
+    ]))
+    story.append(summary_table)
+    story.append(PageBreak())
+
+    # Add selected charts
+    for chart_key, chart_name in selected_charts.items():
+        if chart_key in chart_figures:
+            story.append(Paragraph(chart_name, heading_style))
+
+            # Convert Plotly figure to image
+            try:
+                img_bytes = chart_figures[chart_key].to_image(
+                    format="png",
+                    width=700,
+                    height=500,
+                    scale=2
+                )
+                img = Image(io.BytesIO(img_bytes), width=6.5 * inch, height=4.5 * inch)
+                story.append(img)
+                story.append(Spacer(1, 0.3 * inch))
+            except Exception as e:
+                story.append(Paragraph(f"Error rendering chart: {e}", styles['Normal']))
+                story.append(Spacer(1, 0.2 * inch))
+
+            story.append(PageBreak())
+
+    # Build PDF
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 # Sidebar configuration
@@ -550,7 +653,7 @@ if not selected_committees and "Recipient Committee" in df.columns and "Amount" 
             labels={"Total Amount": "Total Amount ($)", "Recipient Committee": "Committee"}
         )
         fig.update_layout(height=500)
-        create_downloadable_chart(fig, "contributions_by_committee", filter_context)
+        create_downloadable_chart(fig, "contributions_by_committee", filter_context, "committee")
 
     with col2:
         st.dataframe(
@@ -591,7 +694,7 @@ if "Amount" in df.columns:
             title="Number of Contributions by Amount Range",
             labels={"Count": "Number of Contributions"}
         )
-        create_downloadable_chart(fig, "contribution_count_by_range", filter_context)
+        create_downloadable_chart(fig, "contribution_count_by_range", filter_context, "amount_count")
 
     with col2:
         fig = px.bar(
@@ -601,7 +704,7 @@ if "Amount" in df.columns:
             title="Total Contribution Amount by Range",
             labels={"Total Amount": "Total Amount ($)"}
         )
-        create_downloadable_chart(fig, "contribution_total_by_range", filter_context)
+        create_downloadable_chart(fig, "contribution_total_by_range", filter_context, "amount_total")
 
 
 # =============================================================================
@@ -879,7 +982,7 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
             size_max=40
         )
         fig.update_layout(height=600, geo=dict(projection_type="albers usa"))
-        create_downloadable_chart(fig, "us_city_contribution_map", filter_context)
+        create_downloadable_chart(fig, "us_city_contribution_map", filter_context, "us_map")
     else:
         st.warning("No city data with known coordinates found for mapping")
 
@@ -934,7 +1037,7 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
                 projection_scale=6
             )
             fig.update_layout(height=600)
-            create_downloadable_chart(fig, "california_city_contribution_map", filter_context)
+            create_downloadable_chart(fig, "california_city_contribution_map", filter_context, "ca_map")
         else:
             st.warning("No California city data with known coordinates found for mapping")
 
@@ -948,7 +1051,7 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
             title="Top 15 California Cities by Contribution Amount"
         )
         fig.update_layout(height=500)
-        create_downloadable_chart(fig, "california_cities_bar", filter_context)
+        create_downloadable_chart(fig, "california_cities_bar", filter_context, "ca_cities")
 
 
 # =============================================================================
@@ -982,7 +1085,7 @@ with col1:
             labels={"Total Amount": "Total Amount ($)"}
         )
         fig.update_layout(height=500)
-        create_downloadable_chart(fig, "top_cities", filter_context)
+        create_downloadable_chart(fig, "top_cities", filter_context, "top_cities")
 
 with col2:
     st.subheader("Top 15 States")
@@ -1008,7 +1111,7 @@ with col2:
             labels={"Total Amount": "Total Amount ($)"}
         )
         fig.update_layout(height=500)
-        create_downloadable_chart(fig, "top_states", filter_context)
+        create_downloadable_chart(fig, "top_states", filter_context, "top_states")
 
 
 # =============================================================================
@@ -1041,7 +1144,7 @@ if "Start Date" in df.columns and "Amount" in df.columns:
                 labels={"Total Amount": "Total Amount ($)"}
             )
             fig.update_traces(line_color='#1f77b4', line_width=2)
-            create_downloadable_chart(fig, "daily_amounts", filter_context)
+            create_downloadable_chart(fig, "daily_amounts", filter_context, "daily_amounts")
 
         with col2:
             fig = px.line(
@@ -1052,7 +1155,7 @@ if "Start Date" in df.columns and "Amount" in df.columns:
                 labels={"Number of Contributions": "Count"}
             )
             fig.update_traces(line_color='#ff7f0e', line_width=2)
-            create_downloadable_chart(fig, "daily_counts", filter_context)
+            create_downloadable_chart(fig, "daily_counts", filter_context, "daily_counts")
 
         # Monthly aggregation
         df_time["Month"] = df_time["Start Date"].dt.to_period('M').astype(str)
@@ -1092,7 +1195,7 @@ if "Start Date" in df.columns and "Amount" in df.columns:
             hovermode="x unified",
             height=500
         )
-        create_downloadable_chart(fig, "monthly_contributions", filter_context)
+        create_downloadable_chart(fig, "monthly_contributions", filter_context, "monthly")
 
 
 # =============================================================================
@@ -1144,7 +1247,7 @@ with col2:
             title="Top 15 Occupations by Contribution Amount"
         )
         fig.update_layout(height=400)
-        create_downloadable_chart(fig, "top_occupations", filter_context)
+        create_downloadable_chart(fig, "top_occupations", filter_context, "occupations")
 
 
 # =============================================================================
@@ -1194,30 +1297,88 @@ with col2:
 
 st.divider()
 
-# PDF Report (Coming Soon)
+# PDF Report Generator
 st.subheader("📑 Custom PDF Report")
 with st.expander("🎨 Select Charts for PDF Report", expanded=False):
-    st.info("💡 **Coming Soon**: Select which charts to include in a custom PDF report")
+    st.write("**Select which charts to include in your PDF report:**")
 
-    st.write("**Available Charts:**")
+    # Define available charts
+    available_charts = {
+        "committee": "Committee Breakdown",
+        "amount_count": "Amount Distribution (Count)",
+        "amount_total": "Amount Distribution (Total)",
+        "us_map": "US Contribution Map",
+        "ca_map": "California Contribution Map",
+        "ca_cities": "Top California Cities",
+        "top_cities": "Top 15 Cities",
+        "top_states": "Top 15 States",
+        "daily_amounts": "Daily Contribution Amounts",
+        "daily_counts": "Daily Contribution Count",
+        "monthly": "Monthly Contributions",
+        "occupations": "Top Occupations"
+    }
+
     col1, col2, col3 = st.columns(3)
 
-    with col1:
-        st.checkbox("✅ Committee Breakdown", value=True, disabled=True, key="pdf_committee")
-        st.checkbox("✅ Amount Distribution", value=True, disabled=True, key="pdf_amount")
-        st.checkbox("✅ US Map", value=True, disabled=True, key="pdf_us_map")
+    selected_for_pdf = {}
+    chart_keys = list(available_charts.keys())
 
-    with col2:
-        st.checkbox("✅ California Map", value=True, disabled=True, key="pdf_ca_map")
-        st.checkbox("✅ Top Cities", value=True, disabled=True, key="pdf_cities")
-        st.checkbox("✅ Top States", value=True, disabled=True, key="pdf_states")
+    # Distribute checkboxes across 3 columns
+    for idx, (key, name) in enumerate(available_charts.items()):
+        col = [col1, col2, col3][idx % 3]
+        with col:
+            # Check if chart is available in session state
+            is_available = "pdf_charts" in st.session_state and key in st.session_state.pdf_charts
+            checked = st.checkbox(
+                name,
+                value=is_available,
+                key=f"pdf_{key}",
+                disabled=not is_available
+            )
+            if checked and is_available:
+                selected_for_pdf[key] = name
 
-    with col3:
-        st.checkbox("✅ Time Series", value=True, disabled=True, key="pdf_time")
-        st.checkbox("✅ Top Contributors", value=True, disabled=True, key="pdf_contributors")
-        st.checkbox("✅ Occupations", value=True, disabled=True, key="pdf_occupations")
+    st.divider()
 
-    st.caption("⚠️ PDF generation with embedded charts requires additional setup. For now, use the camera icon on each chart to download individual PNGs.")
+    # Generate PDF button
+    if selected_for_pdf:
+        if st.button("📄 Generate PDF Report", type="primary"):
+            with st.spinner("Generating PDF report..."):
+                try:
+                    # Prepare summary statistics
+                    summary_stats = {
+                        "Total Contributions": f"${total_contributions:,.2f}",
+                        "Number of Contributions": f"{num_contributions:,}",
+                        "Average Contribution": f"${avg_contribution:,.2f}",
+                        "Unique Donors": f"{unique_donors:,}",
+                    }
+
+                    # Get filter info
+                    filter_info = ' | '.join(active_filters) if active_filters else "No filters applied"
+
+                    # Generate PDF
+                    pdf_bytes = generate_pdf_report(
+                        selected_for_pdf,
+                        summary_stats,
+                        filter_info,
+                        st.session_state.pdf_charts
+                    )
+
+                    # Offer download
+                    st.download_button(
+                        label="💾 Download PDF Report",
+                        data=pdf_bytes,
+                        file_name=f"contribution_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                        mime="application/pdf"
+                    )
+                    st.success("✅ PDF generated successfully!")
+                except Exception as e:
+                    st.error(f"Error generating PDF: {e}")
+                    st.caption("Make sure all required packages are installed: kaleido, reportlab, Pillow")
+    else:
+        st.info("Select at least one chart to generate a PDF report")
+
+    st.caption("💡 Charts must be rendered on the page before they can be included in the PDF")
 
 st.divider()
 st.caption("💡 **Tip**: Use the camera icon in the top-right of any chart to download it as a PNG image")
