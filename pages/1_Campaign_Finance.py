@@ -26,15 +26,202 @@ from reportlab.platypus import (
 from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 
+DEFAULT_LANGUAGE = "en"
+TRANSLATIONS = {
+    "es": {
+        "**Expected Field** (Required fields marked with *)": "**Campo esperado** (los campos obligatorios tienen *)",
+        "**Select which charts to include in your PDF report:**": "**Selecciona qué gráficos incluir en tu informe PDF:**",
+        "**Your CSV Column**": "**Columna de tu CSV**",
+        "Amount Distribution (Count)": "Distribución de montos (cantidad)",
+        "Amount Distribution (Total)": "Distribución de montos (total)",
+        "Amount Range ($)": "Rango de monto ($)",
+        "Amount: {low} to {high}": "Monto: {low} a {high}",
+        "Average Contribution": "Contribución promedio",
+        "Avg Union Contribution": "Contribución sindical promedio",
+        "Back to Home": "Volver al inicio",
+        "California Contribution Map": "Mapa de contribuciones de California",
+        "California Contribution Map (by City)": "Mapa de contribuciones de California (por ciudad)",
+        "Case-insensitive search in contributor names": "Búsqueda que no distingue mayúsculas/minúsculas en nombres de contribuyentes",
+        "Committee Breakdown": "Desglose por comité",
+        "Committee": "Comité",
+        "Committees: {value}": "Comités: {value}",
+        "{count} Committees": "{count} comités",
+        "Committee or candidate receiving contribution": "Comité o candidato que recibe la contribución",
+        "Contribution Trends Over Time": "Tendencias de contribuciones en el tiempo",
+        "Contribution amount (numeric)": "Monto de la contribución (numérico)",
+        "Contribution date": "Fecha de contribución",
+        "Contributor: '{value}'": "Contribuyente: '{value}'",
+        "Daily Contribution Amount by Committee": "Monto diario por comité",
+        "Daily Contribution Amounts": "Montos diarios de contribución",
+        "Daily Contribution Count": "Conteo diario de contribuciones",
+        "Daily Number of Contributions": "Número diario de contribuciones",
+        "Date": "Fecha",
+        "Date Range": "Rango de fechas",
+        "Dates: {start} to {end}": "Fechas: {start} a {end}",
+        "{start} to {end}": "{start} a {end}",
+        "Declining Activity": "Actividad en descenso",
+        "Deselect All": "Deseleccionar todo",
+        "Enable to load every row in the CSV. Disable to cap the number of rows for faster previews.":
+            "Activa para cargar todas las filas del CSV. Desactiva para limitar filas y obtener vistas previas más rápidas.",
+        "Disable 'Load entire file' to limit how many rows are read.": "Desactiva \"Cargar todo el archivo\" para limitar cuántas filas se leen.",
+        "Employer/Occupation data not available for union detection": "No hay datos de empleador/ocupación para detectar sindicatos",
+        "Error generating PDF: {error}": "Error al generar el PDF: {error}",
+        "Error previewing mapped data: {error}": "Error al previsualizar los datos mapeados: {error}",
+        "Error rendering chart: {error}": "Error al renderizar el gráfico: {error}",
+        "Failed to apply column mapping: {error}": "Error al aplicar el mapeo de columnas: {error}",
+        "Failed to load CSV: {error}": "Error al cargar el CSV: {error}",
+        "Filter by State(s)": "Filtrar por estado(s)",
+        "Filter by contribution amount": "Filtra por monto de contribución",
+        "Filter contributions by date": "Filtra las contribuciones por fecha",
+        "Generating PDF report...": "Generando informe PDF...",
+        "Geographic Concentration": "Concentración geográfica",
+        "Generated: {timestamp}": "Generado: {timestamp}",
+        "Increasing Momentum": "Impulso creciente",
+        "Large Donations Detected": "Se detectaron donaciones grandes",
+        "Leave empty to load all rows": "Déjalo vacío para cargar todas las filas",
+        "Leave empty to show all states": "Déjalo vacío para mostrar todos los estados",
+        "Load entire file": "Cargar todo el archivo",
+        "Loading CSV...": "Cargando CSV...",
+        "Make sure all required packages are installed: kaleido, reportlab, Pillow":
+            "Asegúrate de que estén instalados los paquetes requeridos: kaleido, reportlab, Pillow",
+        "Map to": "Asignar a",
+        "Map your CSV columns to the expected format. We've auto-detected likely matches.":
+            "Asigna tus columnas del CSV al formato esperado. Detectamos posibles coincidencias automáticamente.",
+        "Max rows to load": "Filas máximas a cargar",
+        "Max rows to load (blank = all)": "Filas máximas a cargar (vacío = todas)",
+        "Monthly Contributions: Amount vs Count": "Contribuciones mensuales: monto vs cantidad",
+        "Monthly Contributions": "Contribuciones mensuales",
+        "Month": "Mes",
+        "N/A": "N/D",
+        "No filters applied": "Sin filtros aplicados",
+        "No city data with known coordinates found for mapping": "No se encontraron ciudades con coordenadas conocidas para el mapa",
+        "No California city data with known coordinates found for mapping": "No se encontraron ciudades de CA con coordenadas conocidas para el mapa",
+        "No significant patterns detected in current data": "No se detectaron patrones significativos en los datos actuales",
+        "Non-Union": "No sindical",
+        "Number of Contributions": "Número de contribuciones",
+        "Number of Contributions by Amount Range": "Número de contribuciones por rango de monto",
+        "Or enter a CSV path": "O ingresa una ruta de CSV",
+        "Please map all required fields (*) to continue.": "Asigna todos los campos obligatorios (*) para continuar.",
+        "Recent contributions down {pct}% from earlier period": "Las contribuciones recientes bajaron {pct}% frente al periodo anterior",
+        "Recent weeks show {pct}% more contributions": "Las últimas semanas muestran {pct}% más contribuciones",
+        "Search Contributor Name": "Buscar nombre del contribuyente",
+        "Select All": "Seleccionar todo",
+        "Select All Available": "Seleccionar todo lo disponible",
+        "Disable 'Load entire file' to limit how many rows are read.": "Desactiva \"Cargar todo el archivo\" para limitar cuántas filas se leen.",
+        "Select at least one chart to generate a PDF report": "Selecciona al menos un gráfico para generar un informe PDF",
+        "Showing {filtered} of {total} records ({percent}%)": "Mostrando {filtered} de {total} registros ({percent}%)",
+        "Side-by-Side Committee Analysis": "Análisis comparativo de comités",
+        "Single largest donor: {pct}% of total contributions": "Mayor donante individual: {pct}% del total de contribuciones",
+        "States: {value}": "Estados: {value}",
+        "{count} States": "{count} estados",
+        "Summary Statistics": "Estadísticas resumidas",
+        "Top 15 California Cities by Contribution Amount": "Top 15 ciudades de California por monto de contribución",
+        "Top 15 Cities": "Top 15 ciudades",
+        "Top 15 Cities by Contribution Amount": "Top 15 ciudades por monto de contribución",
+        "Top 15 Committees by Total Contributions": "Top 15 comités por contribuciones totales",
+        "Top 15 Occupations": "Top 15 ocupaciones",
+        "Top 15 Occupations by Contribution Amount": "Top 15 ocupaciones por monto de contribución",
+        "Top 15 States": "Top 15 estados",
+        "Top 15 States by Contribution Amount": "Top 15 estados por monto de contribución",
+        "Top 15 Union/Labor Organizations by Contribution Amount": "Top 15 organizaciones sindicales/laborales por monto de contribución",
+        "Top 20 Contributors": "Top 20 contribuyentes",
+        "Top California Cities": "Principales ciudades de California",
+        "Top Donor Impact": "Impacto del mayor donante",
+        "Top Occupations": "Top ocupaciones",
+        "Top Union/Labor Organizations": "Principales organizaciones sindicales/laborales",
+        "Top {count} California Cities by Contribution Amount": "Top {count} ciudades de California por monto de contribución",
+        "Top {count} US Cities by Contribution Amount": "Top {count} ciudades de EE. UU. por monto de contribución",
+        "Total Amount ($)": "Monto total ($)",
+        "Total Contribution Amount by Range": "Monto total de contribuciones por rango",
+        "Total Contributions": "Contribuciones totales",
+        "Type": "Tipo",
+        "Unique Donors": "Donantes únicos",
+        "City": "Ciudad",
+        "State": "Estado",
+        "US Contribution Map": "Mapa de contribuciones de EE. UU.",
+        "United States Contribution Map (by City)": "Mapa de contribuciones de Estados Unidos (por ciudad)",
+        "Upload campaign finance CSV data to analyze contributions, donors, committees, and trends.":
+            "Carga un CSV de finanzas de campaña para analizar contribuciones, donantes, comités y tendencias.",
+        "Upload your campaign finance CSV to begin analysis": "Sube tu CSV de finanzas de campaña para comenzar el análisis",
+        "Your CSV has {count} columns. Map them to the expected fields below.": "Tu CSV tiene {count} columnas. Asigna cada una a los campos esperados abajo.",
+        "{count} committees available": "Hay {count} comités disponibles",
+        "{count} contributions over {amount} (10x average)": "{count} contribuciones superiores a {amount} (10x el promedio)",
+        "{pct}% of contributions from {city}": "{pct}% de las contribuciones provienen de {city}",
+        "🏛️ Contributions by Committee": "🏛️ Contribuciones por comité",
+        "🗺️ Column Mapping": "🗺️ Mapeo de columnas",
+        "🗺️ Geographic Distribution": "🗺️ Distribución geográfica",
+        "📄 CSV Exports": "📄 Exportaciones CSV",
+        "📄 Download Filtered Dataset (CSV)": "📄 Descargar datos filtrados (CSV)",
+        "📄 View Raw Data (first 100 rows)": "📄 Ver datos originales (primeras 100 filas)",
+        "📅 Contributions Over Time": "📅 Contribuciones en el tiempo",
+        "📈 Summary Statistics": "📈 Estadísticas resumidas",
+        "📊 Showing all {count} records": "📊 Mostrando los {count} registros completos",
+        "📋 Configure Column Mapping": "📋 Configurar mapeo de columnas",
+        "📋 Select Committee(s)": "📋 Seleccionar comité(s)",
+        "📥 Export & Reports": "📥 Exportaciones e informes",
+        "💡 Smart Insights": "💡 Ideas inteligentes",
+        "💡 Select a single committee to see detailed insights (large donations, momentum trends, top donors)":
+            "💡 Selecciona un solo comité para ver información detallada (donaciones grandes, tendencias, principales donantes)",
+        "💵 Contribution Amount Distribution": "💵 Distribución de montos de contribución",
+        "⚙️ Configuration": "⚙️ Configuración",
+        "⚖️ Committee Comparison": "⚖️ Comparación de comités",
+        "🌐 Show page in Spanish": "🌐 Mostrar la página en español",
+        "📍 Top Contributing Locations": "📍 Principales ubicaciones aportantes",
+        "📑 Custom PDF Report": "📑 Informe PDF personalizado",
+        "📊 Download Summary Report (CSV)": "📊 Descargar resumen (CSV)",
+        "📄 Generate PDF Report": "📄 Generar informe PDF",
+        "📄 CSV Exports": "📄 Exportaciones CSV",
+        "💾 Download PDF Report": "💾 Descargar informe PDF",
+        "💡 Charts must be rendered on the page before they can be included in the PDF":
+            "💡 Los gráficos deben mostrarse en la página antes de poder incluirse en el PDF",
+        "💡 **Tip**: Use the camera icon in the top-right of any chart to download it as a PNG image":
+            "💡 Consejo: Usa el ícono de cámara en la esquina superior derecha de cualquier gráfico para descargarlo como PNG",
+        "🔍 Additional Insights": "🔍 Ideas adicionales",
+        "🔍 Filters": "🔍 Filtros",
+        "🔎 **Active Filters:** {filters}": "🔎 **Filtros activos:** {filters}",
+        "🔄 Reset to Auto-Detect": "🔄 Restablecer a autodetección",
+        "⚠️ Missing required fields: {fields}": "⚠️ Faltan campos obligatorios: {fields}",
+        "✅ Apply Mapping": "✅ Aplicar mapeo",
+        "✅ Loaded and mapped {records} contribution records": "✅ Se cargaron y mapearon {records} registros de contribuciones",
+        "✅ Mapping applied!": "✅ Mapeo aplicado",
+        "✅ PDF generated successfully!": "✅ ¡PDF generado correctamente!",
+        "🎨 Select Charts for PDF Report": "🎨 Seleccionar gráficos para el informe PDF",
+        "👁️ Preview Mapped Data": "👁️ Vista previa de datos mapeados",
+        "Campaign Contribution Analysis Report": "Informe de contribuciones de campaña",
+        "<b>Filters Applied:</b> {filters}": "<b>Filtros aplicados:</b> {filters}",
+        "💰 Campaign Finance Analyzer": "💰 Analizador de finanzas de campaña",
+        "Upload CSV": "Subir CSV",
+        "← Back to Home": "← Regresar al inicio",
+        "👆 Upload a CSV file or enter a path to begin analysis": "👆 Sube un archivo CSV o ingresa una ruta para comenzar el análisis",
+    }
+}
+
+
+def _(text: str, **kwargs) -> str:
+    """Return the translated string for the current language."""
+    language = st.session_state.get("language", DEFAULT_LANGUAGE)
+    translated = TRANSLATIONS.get(language, {}).get(text, text)
+    if kwargs:
+        return translated.format(**kwargs)
+    return translated
+
+
 st.set_page_config(page_title="Campaign Finance | DataViz", page_icon="💰", layout="wide")
 
-st.title("💰 Campaign Finance Analyzer")
-st.write("Upload campaign finance CSV data to analyze contributions, donors, committees, and trends.")
+st.title(_("💰 Campaign Finance Analyzer"))
+st.write(_("Upload campaign finance CSV data to analyze contributions, donors, committees, and trends."))
 
 # Back to home button in sidebar
 with st.sidebar:
-    if st.button("← Back to Home", key="back_to_home_top"):
+    if st.button(_("← Back to Home"), key="back_to_home_top"):
         st.switch_page("Home.py")
+
+    toggle_value = st.toggle(
+        _("🌐 Show page in Spanish"),
+        value=st.session_state.get("language", DEFAULT_LANGUAGE) == "es",
+    )
+    st.session_state.language = "es" if toggle_value else "en"
+
     st.divider()
 
 
@@ -183,12 +370,12 @@ def get_filter_context(selected_committees, date_min, date_max, amount_min, amou
             title_parts.append(f"{selected_committees[0]}")
             filename_parts.append(selected_committees[0].replace(' ', '_').replace(',', ''))
         else:
-            title_parts.append(f"{len(selected_committees)} Committees")
+            title_parts.append(_("{count} Committees", count=len(selected_committees)))
             filename_parts.append(f"{len(selected_committees)}_committees")
 
     if date_min and date_max:
         if date_min != date_max:
-            title_parts.append(f"{date_min} to {date_max}")
+            title_parts.append(_("{start} to {end}", start=date_min, end=date_max))
             filename_parts.append(f"{date_min}_to_{date_max}")
 
     if amount_min is not None and amount_max is not None:
@@ -204,7 +391,7 @@ def get_filter_context(selected_committees, date_min, date_max, amount_min, amou
             title_parts.append(", ".join(selected_states))
             filename_parts.append("_".join(selected_states))
         else:
-            title_parts.append(f"{len(selected_states)} States")
+            title_parts.append(_("{count} States", count=len(selected_states)))
             filename_parts.append(f"{len(selected_states)}_states")
 
     title_suffix = f" ({' | '.join(title_parts)})" if title_parts else ""
@@ -265,8 +452,10 @@ def generate_smart_insights(df: pd.DataFrame, single_committee_mode: bool = Fals
                 insights.append({
                     "type": "alert",
                     "icon": "🚨",
-                    "title": "Large Donations Detected",
-                    "message": f"{len(large_donations)} contributions over ${large_threshold:,.0f} (10x average)"
+                    "title": _("Large Donations Detected"),
+                    "message": _("{count} contributions over {amount} (10x average)",
+                                 count=len(large_donations),
+                                 amount=f"${large_threshold:,.0f}")
                 })
 
         # Contribution velocity (if dates available)
@@ -285,15 +474,17 @@ def generate_smart_insights(df: pd.DataFrame, single_committee_mode: bool = Fals
                         insights.append({
                             "type": "positive",
                             "icon": "📈",
-                            "title": "Increasing Momentum",
-                            "message": f"Recent weeks show {(recent_avg/older_avg - 1)*100:.0f}% more contributions"
+                            "title": _("Increasing Momentum"),
+                            "message": _("Recent weeks show {pct}% more contributions",
+                                         pct=f"{(recent_avg/older_avg - 1)*100:.0f}")
                         })
                     elif recent_avg < older_avg * 0.5:
                         insights.append({
                             "type": "warning",
                             "icon": "📉",
-                            "title": "Declining Activity",
-                            "message": f"Recent contributions down {(1 - recent_avg/older_avg)*100:.0f}% from earlier period"
+                            "title": _("Declining Activity"),
+                            "message": _("Recent contributions down {pct}% from earlier period",
+                                         pct=f"{(1 - recent_avg/older_avg)*100:.0f}")
                         })
 
         # Top donor contribution percentage
@@ -305,8 +496,9 @@ def generate_smart_insights(df: pd.DataFrame, single_committee_mode: bool = Fals
                     insights.append({
                         "type": "info",
                         "icon": "👤",
-                        "title": "Top Donor Impact",
-                        "message": f"Single largest donor: {top_donor_pct:.1f}% of total contributions"
+                        "title": _("Top Donor Impact"),
+                        "message": _("Single largest donor: {pct}% of total contributions",
+                                     pct=f"{top_donor_pct:.1f}")
                     })
 
     # Geographic concentration - useful for both single and multi-committee views
@@ -318,8 +510,10 @@ def generate_smart_insights(df: pd.DataFrame, single_committee_mode: bool = Fals
                 insights.append({
                     "type": "info",
                     "icon": "📍",
-                    "title": "Geographic Concentration",
-                    "message": f"{top_city_pct:.0f}% of contributions from {city_counts.index[0]}"
+                    "title": _("Geographic Concentration"),
+                    "message": _("{pct}% of contributions from {city}",
+                                 pct=f"{top_city_pct:.0f}",
+                                 city=city_counts.index[0])
                 })
 
     return insights
@@ -355,15 +549,15 @@ def generate_pdf_report(
     )
 
     # Title Page
-    story.append(Paragraph("Campaign Contribution Analysis Report", title_style))
-    story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
+    story.append(Paragraph(_("Campaign Contribution Analysis Report"), title_style))
+    story.append(Paragraph(_("Generated: {timestamp}", timestamp=datetime.now().strftime('%Y-%m-%d %H:%M')), styles['Normal']))
     if filter_info:
         story.append(Spacer(1, 0.2 * inch))
-        story.append(Paragraph(f"<b>Filters Applied:</b> {filter_info}", styles['Normal']))
+        story.append(Paragraph(_("<b>Filters Applied:</b> {filters}", filters=filter_info), styles['Normal']))
     story.append(Spacer(1, 0.3 * inch))
 
     # Summary Statistics Table
-    story.append(Paragraph("Summary Statistics", heading_style))
+    story.append(Paragraph(_("Summary Statistics"), heading_style))
 
     summary_data = [[k, v] for k, v in summary_stats.items()]
     summary_table = Table(summary_data, colWidths=[3 * inch, 3 * inch])
@@ -396,7 +590,7 @@ def generate_pdf_report(
                 story.append(img)
                 story.append(Spacer(1, 0.3 * inch))
             except Exception as e:
-                story.append(Paragraph(f"Error rendering chart: {e}", styles['Normal']))
+                story.append(Paragraph(_("Error rendering chart: {error}", error=e), styles['Normal']))
                 story.append(Spacer(1, 0.2 * inch))
 
             story.append(PageBreak())
@@ -409,27 +603,27 @@ def generate_pdf_report(
 
 # Sidebar configuration
 with st.sidebar:
-    st.header("⚙️ Configuration")
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv", "txt"])
-    manual_path = st.text_input("Or enter a CSV path", value="")
+    st.header(_("⚙️ Configuration"))
+    uploaded_file = st.file_uploader(_("Upload CSV"), type=["csv", "txt"])
+    manual_path = st.text_input(_("Or enter a CSV path"), value="")
 
     load_entire_file = st.toggle(
-        "Load entire file",
+        _("Load entire file"),
         value=True,
-        help="Enable to load every row in the CSV. Disable to cap the number of rows for faster previews."
+        help=_("Enable to load every row in the CSV. Disable to cap the number of rows for faster previews.")
     )
 
     max_rows_input = st.number_input(
-        "Max rows to load",
+        _("Max rows to load"),
         min_value=1000,
         value=100000,
         step=10000,
-        help="Disable 'Load entire file' to limit how many rows are read.",
+        help=_("Disable 'Load entire file' to limit how many rows are read."),
         disabled=load_entire_file
     )
 
     st.divider()
-    st.caption("Upload your campaign finance CSV to begin analysis")
+    st.caption(_("Upload your campaign finance CSV to begin analysis"))
 
 max_rows: Optional[int]
 if load_entire_file:
@@ -445,22 +639,22 @@ elif manual_path.strip():
     csv_path = Path(manual_path).expanduser()
 
 if csv_path is None:
-    st.info("👆 Upload a CSV file or enter a path to begin analysis")
+    st.info(_("👆 Upload a CSV file or enter a path to begin analysis"))
     st.stop()
 
 # Load data (raw)
 try:
-    with st.spinner("Loading CSV..."):
+    with st.spinner(_("Loading CSV...")):
         df_raw = load_contribution_data(str(csv_path), max_rows)
 except Exception as exc:
-    st.error(f"Failed to load CSV: {exc}")
+    st.error(_("Failed to load CSV: {error}", error=exc))
     st.stop()
 
 # =============================================================================
 # COLUMN MAPPING
 # =============================================================================
-st.header("🗺️ Column Mapping")
-st.write("Map your CSV columns to the expected format. We've auto-detected likely matches.")
+st.header(_("🗺️ Column Mapping"))
+st.write(_("Map your CSV columns to the expected format. We've auto-detected likely matches."))
 
 # Initialize mapping in session state
 if "column_mapping" not in st.session_state:
@@ -470,16 +664,16 @@ expected_columns = get_expected_columns()
 mapping = st.session_state.column_mapping
 
 # Create mapping UI
-with st.expander("📋 Configure Column Mapping", expanded=True):
-    st.caption(f"Your CSV has {len(df_raw.columns)} columns. Map them to the expected fields below.")
+with st.expander(_("📋 Configure Column Mapping"), expanded=True):
+    st.caption(_("Your CSV has {count} columns. Map them to the expected fields below.", count=len(df_raw.columns)))
 
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        st.write("**Expected Field** (Required fields marked with *)")
+        st.write(_("**Expected Field** (Required fields marked with *)"))
 
     with col2:
-        st.write("**Your CSV Column**")
+        st.write(_("**Your CSV Column**"))
 
     st.divider()
 
@@ -491,7 +685,7 @@ with st.expander("📋 Configure Column Mapping", expanded=True):
         with col1:
             required_marker = " *" if config["required"] else ""
             st.write(f"**{target_col}**{required_marker}")
-            st.caption(config["description"])
+            st.caption(_(config["description"]))
 
         with col2:
             options = ["(skip)"] + df_raw.columns.tolist()
@@ -501,7 +695,7 @@ with st.expander("📋 Configure Column Mapping", expanded=True):
                 current_value = "(skip)"
 
             selected = st.selectbox(
-                f"Map to",
+                _("Map to"),
                 options=options,
                 index=options.index(current_value) if current_value in options else 0,
                 key=f"mapping_{target_col}",
@@ -520,37 +714,37 @@ with st.expander("📋 Configure Column Mapping", expanded=True):
             missing_required.append(target_col)
 
     if missing_required:
-        st.error(f"⚠️ Missing required fields: {', '.join(missing_required)}")
-        st.caption("Please map all required fields (*) to continue.")
+        st.error(_("⚠️ Missing required fields: {fields}", fields=", ".join(missing_required)))
+        st.caption(_("Please map all required fields (*) to continue."))
         st.stop()
 
     # Show preview of mapped data
-    with st.expander("👁️ Preview Mapped Data", expanded=False):
+    with st.expander(_("👁️ Preview Mapped Data"), expanded=False):
         try:
             df_preview = apply_column_mapping(df_raw.head(100), updated_mapping)
             st.dataframe(df_preview, use_container_width=True)
         except Exception as e:
-            st.error(f"Error previewing mapped data: {e}")
+            st.error(_("Error previewing mapped data: {error}", error=e))
 
     # Save mapping button
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
-        if st.button("✅ Apply Mapping", type="primary"):
+        if st.button(_("✅ Apply Mapping"), type="primary"):
             st.session_state.column_mapping = updated_mapping
-            st.success("✅ Mapping applied!")
+            st.success(_("✅ Mapping applied!"))
             st.rerun()
 
     with col2:
-        if st.button("🔄 Reset to Auto-Detect"):
+        if st.button(_("🔄 Reset to Auto-Detect")):
             st.session_state.column_mapping = auto_detect_column_mapping(df_raw.columns.tolist())
             st.rerun()
 
 # Apply the mapping
 try:
     df_full = apply_column_mapping(df_raw, st.session_state.column_mapping)
-    st.success(f"✅ Loaded and mapped {len(df_full):,} contribution records")
+    st.success(_("✅ Loaded and mapped {records} contribution records", records=f"{len(df_full):,}"))
 except Exception as exc:
-    st.error(f"Failed to apply column mapping: {exc}")
+    st.error(_("Failed to apply column mapping: {error}", error=exc))
     st.stop()
 
 
@@ -559,15 +753,15 @@ except Exception as exc:
 # =============================================================================
 with st.sidebar:
     st.divider()
-    st.header("🔍 Filters")
+    st.header(_("🔍 Filters"))
 
     # Committee filter (checkboxes)
     selected_committees = []
     if "Recipient Committee" in df_full.columns:
         committees = sorted(df_full["Recipient Committee"].dropna().unique().tolist())
 
-        with st.expander("📋 Select Committee(s)", expanded=True):
-            st.caption(f"{len(committees)} committees available")
+        with st.expander(_("📋 Select Committee(s)"), expanded=True):
+            st.caption(_("{count} committees available", count=len(committees)))
 
             # Initialize session state for checkboxes first
             if "committee_selections" not in st.session_state:
@@ -580,8 +774,8 @@ with st.sidebar:
 
             # Add "Select All" / "Deselect All" buttons
             col1, col2 = st.columns(2)
-            select_all = col1.button("Select All", key="select_all_committees")
-            deselect_all = col2.button("Deselect All", key="deselect_all_committees")
+            select_all = col1.button(_("Select All"), key="select_all_committees")
+            deselect_all = col2.button(_("Deselect All"), key="deselect_all_committees")
 
             # Handle select/deselect all - update all and trigger rerun
             if select_all:
@@ -616,11 +810,11 @@ with st.sidebar:
             max_date = valid_dates.max().date()
 
             date_range = st.date_input(
-                "Date Range",
+                _("Date Range"),
                 value=(min_date, max_date),
                 min_value=min_date,
                 max_value=max_date,
-                help="Filter contributions by date"
+                help=_("Filter contributions by date")
             )
             if isinstance(date_range, tuple) and len(date_range) == 2:
                 date_min, date_max = date_range
@@ -634,19 +828,19 @@ with st.sidebar:
             max_amt = float(valid_amounts.max())
 
             amount_range = st.slider(
-                "Amount Range ($)",
+                _("Amount Range ($)"),
                 min_value=min_amt,
                 max_value=max_amt,
                 value=(min_amt, max_amt),
-                help="Filter by contribution amount",
+                help=_("Filter by contribution amount"),
                 format="$%.0f"  # Show as whole dollars
             )
             amount_min, amount_max = amount_range
 
     # Contributor search
     contributor_search = st.text_input(
-        "Search Contributor Name",
-        help="Case-insensitive search in contributor names"
+        _("Search Contributor Name"),
+        help=_("Case-insensitive search in contributor names")
     )
 
     # State filter
@@ -654,9 +848,9 @@ with st.sidebar:
     if "Contributor State" in df_full.columns:
         states = sorted(df_full["Contributor State"].dropna().unique().tolist())
         selected_states = st.multiselect(
-            "Filter by State(s)",
+            _("Filter by State(s)"),
             options=states,
-            help="Leave empty to show all states"
+            help=_("Leave empty to show all states")
         )
 
 
@@ -666,23 +860,23 @@ active_filters = []
 
 if selected_committees:
     df = df[df["Recipient Committee"].isin(selected_committees)]
-    active_filters.append(f"Committees: {', '.join(selected_committees)}")
+    active_filters.append(_("Committees: {value}", value=", ".join(selected_committees)))
 
 if date_min and date_max and "Start Date" in df.columns:
     df = df[(df["Start Date"].dt.date >= date_min) & (df["Start Date"].dt.date <= date_max)]
-    active_filters.append(f"Dates: {date_min} to {date_max}")
+    active_filters.append(_("Dates: {start} to {end}", start=date_min, end=date_max))
 
 if amount_min is not None and amount_max is not None and "Amount" in df.columns:
     df = df[(df["Amount"] >= amount_min) & (df["Amount"] <= amount_max)]
-    active_filters.append(f"Amount: ${amount_min:,.2f} to ${amount_max:,.2f}")
+    active_filters.append(_("Amount: {low} to {high}", low=f"${amount_min:,.2f}", high=f"${amount_max:,.2f}"))
 
 if contributor_search:
     df = df[df["Contributor Name"].str.contains(contributor_search, case=False, na=False)]
-    active_filters.append(f"Contributor: '{contributor_search}'")
+    active_filters.append(_("Contributor: '{value}'", value=contributor_search))
 
 if selected_states:
     df = df[df["Contributor State"].isin(selected_states)]
-    active_filters.append(f"States: {', '.join(selected_states)}")
+    active_filters.append(_("States: {value}", value=", ".join(selected_states)))
 
 # Generate filter context for chart titles and filenames
 filter_context = get_filter_context(
@@ -698,50 +892,53 @@ filter_context = get_filter_context(
 
 # Display active filters
 if active_filters:
-    st.info(f"🔎 **Active Filters:** {' | '.join(active_filters)}")
-    st.caption(f"Showing {len(df):,} of {len(df_full):,} records ({len(df)/len(df_full)*100:.1f}%)")
+    st.info(_("🔎 **Active Filters:** {filters}", filters=" | ".join(active_filters)))
+    st.caption(_("Showing {filtered} of {total} records ({percent}%)",
+                filtered=f"{len(df):,}",
+                total=f"{len(df_full):,}",
+                percent=f"{len(df)/len(df_full)*100:.1f}"))
 else:
-    st.info(f"📊 Showing all {len(df):,} records")
+    st.info(_("📊 Showing all {count} records", count=f"{len(df):,}"))
 
 
 # Display raw data preview
-with st.expander("📄 View Raw Data (first 100 rows)", expanded=False):
+with st.expander(_("📄 View Raw Data (first 100 rows)"), expanded=False):
     st.dataframe(df.head(100), use_container_width=True)
 
 
 # =============================================================================
 # SUMMARY STATISTICS
 # =============================================================================
-st.header("📈 Summary Statistics")
+st.header(_("📈 Summary Statistics"))
 
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     total_contributions = df["Amount"].sum() if "Amount" in df.columns else 0
-    st.metric("Total Contributions", f"${total_contributions:,.2f}")
+    st.metric(_("Total Contributions"), f"${total_contributions:,.2f}")
 
 with col2:
     num_contributions = len(df)
-    st.metric("Number of Contributions", f"{num_contributions:,}")
+    st.metric(_("Number of Contributions"), f"{num_contributions:,}")
 
 with col3:
     avg_contribution = df["Amount"].mean() if "Amount" in df.columns else 0
-    st.metric("Average Contribution", f"${avg_contribution:,.2f}")
+    st.metric(_("Average Contribution"), f"${avg_contribution:,.2f}")
 
 with col4:
     unique_donors = df["Contributor Name"].nunique() if "Contributor Name" in df.columns else 0
-    st.metric("Unique Donors", f"{unique_donors:,}")
+    st.metric(_("Unique Donors"), f"{unique_donors:,}")
 
 
 # =============================================================================
 # SMART INSIGHTS & ALERTS
 # =============================================================================
-st.header("💡 Smart Insights")
+st.header(_("💡 Smart Insights"))
 
 # Only show detailed insights when viewing a single committee
 single_committee_mode = len(selected_committees) == 1
 if not single_committee_mode and len(selected_committees) > 1:
-    st.info("💡 Select a single committee to see detailed insights (large donations, momentum trends, top donors)")
+    st.info(_("💡 Select a single committee to see detailed insights (large donations, momentum trends, top donors)"))
 
 insights = generate_smart_insights(df, single_committee_mode=single_committee_mode)
 
@@ -758,15 +955,15 @@ if insights:
             st.info(f"{insight['icon']} **{insight['title']}**: {insight['message']}")
 else:
     if single_committee_mode:
-        st.info("No significant patterns detected in current data")
+        st.info(_("No significant patterns detected in current data"))
 
 
 # =============================================================================
 # COMMITTEE COMPARISON MODE
 # =============================================================================
 if selected_committees and len(selected_committees) >= 2 and "Recipient Committee" in df.columns:
-    with st.expander("⚖️ Committee Comparison", expanded=True):
-        st.subheader("Side-by-Side Committee Analysis")
+    with st.expander(_("⚖️ Committee Comparison"), expanded=True):
+        st.subheader(_("Side-by-Side Committee Analysis"))
 
         # Comparison metrics table
         comparison_stats = []
@@ -795,7 +992,7 @@ if selected_committees and len(selected_committees) >= 2 and "Recipient Committe
 
         # Overlaid time series if dates available
         if "Start Date" in df.columns:
-            st.subheader("Contribution Trends Over Time")
+            st.subheader(_("Contribution Trends Over Time"))
 
             fig = go.Figure()
             colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
@@ -819,9 +1016,9 @@ if selected_committees and len(selected_committees) >= 2 and "Recipient Committe
                     ))
 
             fig.update_layout(
-                title="Daily Contribution Amount by Committee",
-                xaxis_title="Date",
-                yaxis_title="Total Amount ($)",
+                title=_("Daily Contribution Amount by Committee"),
+                xaxis_title=_("Date"),
+                yaxis_title=_("Total Amount ($)"),
                 hovermode="x unified",
                 height=500
             )
@@ -832,7 +1029,7 @@ if selected_committees and len(selected_committees) >= 2 and "Recipient Committe
 # CONTRIBUTIONS BY COMMITTEE (only show if not filtered to specific committees)
 # =============================================================================
 if not selected_committees and "Recipient Committee" in df.columns and "Amount" in df.columns:
-    st.header("🏛️ Contributions by Committee")
+    st.header(_("🏛️ Contributions by Committee"))
 
     committee_stats = (
         df.groupby("Recipient Committee")
@@ -852,8 +1049,8 @@ if not selected_committees and "Recipient Committee" in df.columns and "Amount" 
             x="Total Amount",
             y="Recipient Committee",
             orientation="h",
-            title="Top 15 Committees by Total Contributions",
-            labels={"Total Amount": "Total Amount ($)", "Recipient Committee": "Committee"}
+            title=_("Top 15 Committees by Total Contributions"),
+            labels={"Total Amount": _("Total Amount ($)"), "Recipient Committee": _("Committee")}
         )
         fig.update_layout(height=500)
         create_downloadable_chart(fig, "contributions_by_committee", filter_context, "committee")
@@ -873,7 +1070,7 @@ if not selected_committees and "Recipient Committee" in df.columns and "Amount" 
 # =============================================================================
 # CONTRIBUTION AMOUNT RANGES
 # =============================================================================
-st.header("💵 Contribution Amount Distribution")
+st.header(_("💵 Contribution Amount Distribution"))
 
 if "Amount" in df.columns:
     bins = [0, 50, 100, 250, 500, 1000, 2500, 5000, float('inf')]
@@ -894,8 +1091,8 @@ if "Amount" in df.columns:
             amount_dist,
             x="Amount Range",
             y="Count",
-            title="Number of Contributions by Amount Range",
-            labels={"Count": "Number of Contributions"}
+            title=_("Number of Contributions by Amount Range"),
+            labels={"Count": _("Number of Contributions"), "Amount Range": _("Amount Range ($)")}
         )
         create_downloadable_chart(fig, "contribution_count_by_range", filter_context, "amount_count")
 
@@ -904,8 +1101,8 @@ if "Amount" in df.columns:
             amount_dist,
             x="Amount Range",
             y="Total Amount",
-            title="Total Contribution Amount by Range",
-            labels={"Total Amount": "Total Amount ($)"}
+            title=_("Total Contribution Amount by Range"),
+            labels={"Total Amount": _("Total Amount ($)"), "Amount Range": _("Amount Range ($)")}
         )
         create_downloadable_chart(fig, "contribution_total_by_range", filter_context, "amount_total")
 
@@ -913,7 +1110,7 @@ if "Amount" in df.columns:
 # =============================================================================
 # GEOGRAPHIC VISUALIZATIONS - MAPS
 # =============================================================================
-st.header("🗺️ Geographic Distribution")
+st.header(_("🗺️ Geographic Distribution"))
 
 # Simple geocoding dictionary for common cities (lat, lon)
 CITY_COORDS = {
@@ -1139,7 +1336,7 @@ def get_city_coords(city: str, state: str) -> tuple:
 if "Contributor City" in df.columns and "Contributor State" in df.columns and "Amount" in df.columns:
 
     # US Map - City-level scatter points
-    st.subheader("United States Contribution Map (by City)")
+    st.subheader(_("United States Contribution Map (by City)"))
 
     city_state_data = (
         df.groupby(["Contributor City", "Contributor State"])
@@ -1179,20 +1376,20 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
                 "lat": False,
                 "lon": False
             },
-            labels={"Contributor Name": "Unique Donors"},
-            title=f"Top {len(city_state_data)} US Cities by Contribution Amount",
+            labels={"Contributor Name": _("Unique Donors")},
+            title=_("Top {count} US Cities by Contribution Amount", count=len(city_state_data)),
             scope="usa",
             size_max=40
         )
         fig.update_layout(height=600, geo=dict(projection_type="albers usa"))
         create_downloadable_chart(fig, "us_city_contribution_map", filter_context, "us_map")
     else:
-        st.warning("No city data with known coordinates found for mapping")
+        st.warning(_("No city data with known coordinates found for mapping"))
 
     # California Map (if CA data exists)
     ca_data = df[df["Contributor State"] == "CA"]
     if len(ca_data) > 0 and "Contributor City" in df.columns:
-        st.subheader("California Contribution Map (by City)")
+        st.subheader(_("California Contribution Map (by City)"))
 
         ca_city_data = (
             ca_data.groupby("Contributor City")
@@ -1230,8 +1427,8 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
                     "lat": False,
                     "lon": False
                 },
-                labels={"Contributor Name": "Unique Donors"},
-                title=f"Top {len(ca_city_data)} California Cities by Contribution Amount",
+                labels={"Contributor Name": _("Unique Donors")},
+                title=_("Top {count} California Cities by Contribution Amount", count=len(ca_city_data)),
                 scope="usa",
                 size_max=50
             )
@@ -1242,16 +1439,17 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
             fig.update_layout(height=600)
             create_downloadable_chart(fig, "california_city_contribution_map", filter_context, "ca_map")
         else:
-            st.warning("No California city data with known coordinates found for mapping")
+            st.warning(_("No California city data with known coordinates found for mapping"))
 
         # Also show bar chart for CA cities
-        st.subheader("Top California Cities")
+        st.subheader(_("Top California Cities"))
         fig = px.bar(
             ca_city_data.head(15),
             x="Amount",
             y="Contributor City",
             orientation="h",
-            title="Top 15 California Cities by Contribution Amount"
+            title=_("Top 15 California Cities by Contribution Amount"),
+            labels={"Amount": _("Total Amount ($)"), "Contributor City": _("City")}
         )
         fig.update_layout(height=500)
         create_downloadable_chart(fig, "california_cities_bar", filter_context, "ca_cities")
@@ -1260,12 +1458,12 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
 # =============================================================================
 # TOP LOCATIONS (for non-map view)
 # =============================================================================
-st.header("📍 Top Contributing Locations")
+st.header(_("📍 Top Contributing Locations"))
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Top 15 Cities")
+    st.subheader(_("Top 15 Cities"))
     if "Contributor City" in df.columns and "Amount" in df.columns:
         city_stats = (
             df.groupby("Contributor City")
@@ -1284,14 +1482,14 @@ with col1:
             x="Total Amount",
             y="City",
             orientation="h",
-            title="Top 15 Cities by Contribution Amount",
-            labels={"Total Amount": "Total Amount ($)"}
+            title=_("Top 15 Cities by Contribution Amount"),
+            labels={"Total Amount": _("Total Amount ($)"), "City": _("City")}
         )
         fig.update_layout(height=500)
         create_downloadable_chart(fig, "top_cities", filter_context, "top_cities")
 
 with col2:
-    st.subheader("Top 15 States")
+    st.subheader(_("Top 15 States"))
     if "Contributor State" in df.columns and "Amount" in df.columns:
         state_stats = (
             df.groupby("Contributor State")
@@ -1310,8 +1508,8 @@ with col2:
             x="Total Amount",
             y="State",
             orientation="h",
-            title="Top 15 States by Contribution Amount",
-            labels={"Total Amount": "Total Amount ($)"}
+            title=_("Top 15 States by Contribution Amount"),
+            labels={"Total Amount": _("Total Amount ($)"), "State": _("State")}
         )
         fig.update_layout(height=500)
         create_downloadable_chart(fig, "top_states", filter_context, "top_states")
@@ -1320,7 +1518,7 @@ with col2:
 # =============================================================================
 # TIME SERIES ANALYSIS
 # =============================================================================
-st.header("📅 Contributions Over Time")
+st.header(_("📅 Contributions Over Time"))
 
 if "Start Date" in df.columns and "Amount" in df.columns:
     df_time = df[df["Start Date"].notna()].copy()
@@ -1354,8 +1552,11 @@ if "Start Date" in df.columns and "Amount" in df.columns:
                 daily_contributions,
                 x="Date",
                 y="Number of Contributions",
-                title="Daily Number of Contributions",
-                labels={"Number of Contributions": "Count"}
+                title=_("Daily Number of Contributions"),
+                labels={
+                    "Number of Contributions": _("Number of Contributions"),
+                    "Date": _("Date")
+                }
             )
             fig.update_traces(line_color='#ff7f0e', line_width=2)
             create_downloadable_chart(fig, "daily_counts", filter_context, "daily_counts")
@@ -1404,12 +1605,12 @@ if "Start Date" in df.columns and "Amount" in df.columns:
 # =============================================================================
 # ADDITIONAL INSIGHTS
 # =============================================================================
-st.header("🔍 Additional Insights")
+st.header(_("🔍 Additional Insights"))
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Top 20 Contributors")
+    st.subheader(_("Top 20 Contributors"))
     if "Contributor Name" in df.columns and "Amount" in df.columns:
         top_contributors = (
             df.groupby("Contributor Name")
@@ -1428,7 +1629,7 @@ with col1:
         )
 
 with col2:
-    st.subheader("Top 15 Occupations")
+    st.subheader(_("Top 15 Occupations"))
     if "Contributor Occupation" in df.columns and "Amount" in df.columns:
         occupation_stats = (
             df.groupby("Contributor Occupation")
@@ -1456,16 +1657,16 @@ with col2:
 # =============================================================================
 # DATA EXPORT
 # =============================================================================
-st.header("📥 Export & Reports")
+st.header(_("📥 Export & Reports"))
 
 # CSV Exports
-st.subheader("📄 CSV Exports")
+st.subheader(_("📄 CSV Exports"))
 col1, col2 = st.columns(2)
 
 with col1:
     csv_data = df.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📄 Download Filtered Dataset (CSV)",
+        label=_("📄 Download Filtered Dataset (CSV)"),
         data=csv_data,
         file_name=f"contributions_filtered_{len(df)}_records.csv",
         mime="text/csv"
@@ -1474,25 +1675,25 @@ with col1:
 with col2:
     summary_data = {
         "Metric": [
-            "Total Contributions",
-            "Number of Contributions",
-            "Average Contribution",
-            "Unique Donors",
-            "Date Range"
+            _("Total Contributions"),
+            _("Number of Contributions"),
+            _("Average Contribution"),
+            _("Unique Donors"),
+            _("Date Range")
         ],
         "Value": [
             f"${total_contributions:,.2f}",
             f"{num_contributions:,}",
             f"${avg_contribution:,.2f}",
             f"{unique_donors:,}",
-            f"{df['Start Date'].min()} to {df['Start Date'].max()}" if "Start Date" in df.columns else "N/A"
+            f"{df['Start Date'].min()} to {df['Start Date'].max()}" if "Start Date" in df.columns else _("N/A")
         ]
     }
     summary_df = pd.DataFrame(summary_data)
     summary_csv = summary_df.to_csv(index=False).encode('utf-8')
 
     st.download_button(
-        label="📊 Download Summary Report (CSV)",
+        label=_("📊 Download Summary Report (CSV)"),
         data=summary_csv,
         file_name="contribution_summary.csv",
         mime="text/csv"
@@ -1501,30 +1702,30 @@ with col2:
 st.divider()
 
 # PDF Report Generator
-st.subheader("📑 Custom PDF Report")
-with st.expander("🎨 Select Charts for PDF Report", expanded=False):
-    st.write("**Select which charts to include in your PDF report:**")
+st.subheader(_("📑 Custom PDF Report"))
+with st.expander(_("🎨 Select Charts for PDF Report"), expanded=False):
+    st.write(_("**Select which charts to include in your PDF report:**"))
 
     # Define available charts
     available_charts = {
-        "committee": "Committee Breakdown",
-        "amount_count": "Amount Distribution (Count)",
-        "amount_total": "Amount Distribution (Total)",
-        "us_map": "US Contribution Map",
-        "ca_map": "California Contribution Map",
-        "ca_cities": "Top California Cities",
-        "top_cities": "Top 15 Cities",
-        "top_states": "Top 15 States",
-        "daily_amounts": "Daily Contribution Amounts",
-        "daily_counts": "Daily Contribution Count",
-        "monthly": "Monthly Contributions",
-        "occupations": "Top Occupations"
+        "committee": _("Committee Breakdown"),
+        "amount_count": _("Amount Distribution (Count)"),
+        "amount_total": _("Amount Distribution (Total)"),
+        "us_map": _("US Contribution Map"),
+        "ca_map": _("California Contribution Map"),
+        "ca_cities": _("Top California Cities"),
+        "top_cities": _("Top 15 Cities"),
+        "top_states": _("Top 15 States"),
+        "daily_amounts": _("Daily Contribution Amounts"),
+        "daily_counts": _("Daily Contribution Count"),
+        "monthly": _("Monthly Contributions"),
+        "occupations": _("Top Occupations")
     }
 
     # Select All / Deselect All buttons for PDF charts
     btn_col1, btn_col2, _ = st.columns([1, 1, 2])
-    select_all_pdf = btn_col1.button("Select All Available", key="select_all_pdf_charts")
-    deselect_all_pdf = btn_col2.button("Deselect All", key="deselect_all_pdf_charts")
+    select_all_pdf = btn_col1.button(_("Select All Available"), key="select_all_pdf_charts")
+    deselect_all_pdf = btn_col2.button(_("Deselect All"), key="deselect_all_pdf_charts")
 
     # Initialize session state for PDF chart selections
     if "pdf_chart_selections" not in st.session_state:
@@ -1579,19 +1780,19 @@ with st.expander("🎨 Select Charts for PDF Report", expanded=False):
 
     # Generate PDF button
     if selected_for_pdf:
-        if st.button("📄 Generate PDF Report", type="primary"):
-            with st.spinner("Generating PDF report..."):
+        if st.button(_("📄 Generate PDF Report"), type="primary"):
+            with st.spinner(_("Generating PDF report...")):
                 try:
                     # Prepare summary statistics
                     summary_stats = {
-                        "Total Contributions": f"${total_contributions:,.2f}",
-                        "Number of Contributions": f"{num_contributions:,}",
-                        "Average Contribution": f"${avg_contribution:,.2f}",
-                        "Unique Donors": f"{unique_donors:,}",
+                        _("Total Contributions"): f"${total_contributions:,.2f}",
+                        _("Number of Contributions"): f"{num_contributions:,}",
+                        _("Average Contribution"): f"${avg_contribution:,.2f}",
+                        _("Unique Donors"): f"{unique_donors:,}",
                     }
 
                     # Get filter info
-                    filter_info = ' | '.join(active_filters) if active_filters else "No filters applied"
+                    filter_info = ' | '.join(active_filters) if active_filters else _("No filters applied")
 
                     # Generate PDF
                     pdf_bytes = generate_pdf_report(
@@ -1603,19 +1804,19 @@ with st.expander("🎨 Select Charts for PDF Report", expanded=False):
 
                     # Offer download
                     st.download_button(
-                        label="💾 Download PDF Report",
+                        label=_("💾 Download PDF Report"),
                         data=pdf_bytes,
                         file_name=f"contribution_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
                         mime="application/pdf"
                     )
-                    st.success("✅ PDF generated successfully!")
+                    st.success(_("✅ PDF generated successfully!"))
                 except Exception as e:
-                    st.error(f"Error generating PDF: {e}")
-                    st.caption("Make sure all required packages are installed: kaleido, reportlab, Pillow")
+                    st.error(_("Error generating PDF: {error}", error=e))
+                    st.caption(_("Make sure all required packages are installed: kaleido, reportlab, Pillow"))
     else:
-        st.info("Select at least one chart to generate a PDF report")
+        st.info(_("Select at least one chart to generate a PDF report"))
 
-    st.caption("💡 Charts must be rendered on the page before they can be included in the PDF")
+    st.caption(_("💡 Charts must be rendered on the page before they can be included in the PDF"))
 
 st.divider()
-st.caption("💡 **Tip**: Use the camera icon in the top-right of any chart to download it as a PNG image")
+st.caption(_("💡 **Tip**: Use the camera icon in the top-right of any chart to download it as a PNG image"))
