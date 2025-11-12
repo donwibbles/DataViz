@@ -1723,7 +1723,7 @@ with st.expander(_("🎨 Select Charts for PDF Report"), expanded=False):
     }
 
     # Select All / Deselect All buttons for PDF charts
-    btn_col1, btn_col2, _ = st.columns([1, 1, 2])
+    btn_col1, btn_col2, btn_spacer = st.columns([1, 1, 2])
     select_all_pdf = btn_col1.button(_("Select All Available"), key="select_all_pdf_charts")
     deselect_all_pdf = btn_col2.button(_("Deselect All"), key="deselect_all_pdf_charts")
 
