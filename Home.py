@@ -38,7 +38,6 @@ with col1:
 
     **Features:**
     - 📊 Interactive charts and geographic maps
-    - ✊ Union & labor support detection
     - 💡 Smart insights and alerts
     - 📈 Committee comparison analysis
     - 📑 Customizable PDF reports
