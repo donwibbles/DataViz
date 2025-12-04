@@ -480,7 +480,7 @@ def create_downloadable_chart(
             'scale': CHART_EXPORT_SCALE
         }
     }
-    st.plotly_chart(fig, use_container_width=True, config=config)
+    st.plotly_chart(fig, width="stretch", config=config)
 
 
 # =============================================================================
@@ -787,7 +787,7 @@ with st.expander("Configure Column Mapping", expanded=False):
     with st.expander("Preview Mapped Data", expanded=False):
         try:
             df_preview = apply_column_mapping(df_raw.head(100), updated_mapping)
-            st.dataframe(df_preview, use_container_width=True)
+            st.dataframe(df_preview, width="stretch")
         except Exception as e:
             st.error(f"Error previewing mapped data: {e}")
 
@@ -936,7 +936,7 @@ else:
 
 # Raw data preview
 with st.expander("View Raw Data (first 100 rows)", expanded=False):
-    st.dataframe(df.head(100), use_container_width=True)
+    st.dataframe(df.head(100), width="stretch")
 
 
 # =============================================================================
@@ -1008,7 +1008,7 @@ if len(selected_committees) >= 2 and "Recipient Committee" in df.columns:
                     "Avg $": "${:,.2f}",
                     "# Donors": "{:,}"
                 }),
-                use_container_width=True
+                width="stretch"
             )
 
         # Time series overlay
@@ -1079,7 +1079,7 @@ if not selected_committees and "Recipient Committee" in df.columns and "Amount" 
                 "Number of Contributions": "{:,.0f}",
                 "Average Amount": "${:,.2f}"
             }),
-            use_container_width=True,
+            width="stretch",
             height=500
         )
 
@@ -1356,7 +1356,7 @@ with col1:
 
         st.dataframe(
             top_contributors.style.format({"Total Amount": "${:,.2f}"}),
-            use_container_width=True,
+            width="stretch",
             height=400
         )
 
