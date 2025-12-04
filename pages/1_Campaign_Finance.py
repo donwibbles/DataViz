@@ -139,6 +139,152 @@ def get_city_coords(city: str, state: str) -> Optional[tuple[float, float]]:
 
 
 # =============================================================================
+# CACHED AGGREGATION HELPERS
+# =============================================================================
+
+@st.cache_data(show_spinner=False)
+def get_committee_stats(_df_hash: int, df: pd.DataFrame) -> pd.DataFrame:
+    """Cached committee statistics aggregation."""
+    return (
+        df.groupby("Recipient Committee")
+        .agg({"Amount": ["sum", "count", "mean"]})
+    )
+
+
+@st.cache_data(show_spinner=False)
+def get_comparison_stats(_df_hash: int, df: pd.DataFrame) -> pd.DataFrame:
+    """Cached comparison statistics aggregation."""
+    stats = (
+        df.groupby("Recipient Committee")
+        .agg({
+            "Amount": ["sum", "count", "mean"],
+            "Contributor Name": "nunique"
+        })
+    )
+    stats.columns = ["Total $", "# Contributions", "Avg $", "# Donors"]
+    return stats.reset_index()
+
+
+@st.cache_data(show_spinner=False)
+def get_city_state_stats(_df_hash: int, df: pd.DataFrame, top_n: int = 100) -> pd.DataFrame:
+    """Cached city/state aggregation with nlargest optimization."""
+    grouped = (
+        df.groupby(["Contributor City", "Contributor State"])
+        .agg({"Amount": "sum", "Contributor Name": "nunique"})
+        .reset_index()
+    )
+    return grouped.nlargest(top_n, "Amount")
+
+
+@st.cache_data(show_spinner=False)
+def get_city_stats(_df_hash: int, df: pd.DataFrame, top_n: int = 15) -> pd.DataFrame:
+    """Cached city statistics with nlargest."""
+    grouped = (
+        df.groupby("Contributor City")
+        .agg({"Amount": "sum", "Contributor Name": "nunique"})
+        .reset_index()
+    )
+    result = grouped.nlargest(top_n, "Amount")
+    result.columns = ["City", "Total Amount", "Unique Donors"]
+    return result
+
+
+@st.cache_data(show_spinner=False)
+def get_state_stats(_df_hash: int, df: pd.DataFrame, top_n: int = 15) -> pd.DataFrame:
+    """Cached state statistics with nlargest."""
+    grouped = (
+        df.groupby("Contributor State")
+        .agg({"Amount": "sum", "Contributor Name": "nunique"})
+        .reset_index()
+    )
+    result = grouped.nlargest(top_n, "Amount")
+    result.columns = ["State", "Total Amount", "Unique Donors"]
+    return result
+
+
+@st.cache_data(show_spinner=False)
+def get_daily_contributions(_df_hash: int, df: pd.DataFrame) -> pd.DataFrame:
+    """Cached daily contribution aggregation."""
+    df_time = df[df["Start Date"].notna()]
+    if len(df_time) == 0:
+        return pd.DataFrame()
+
+    daily = (
+        df_time.groupby(df_time["Start Date"].dt.date)
+        .agg({"Amount": "sum", "Contributor Name": "count"})
+        .reset_index()
+    )
+    daily.columns = ["Date", "Total Amount", "Number of Contributions"]
+    return daily
+
+
+@st.cache_data(show_spinner=False)
+def get_monthly_contributions(_df_hash: int, df: pd.DataFrame) -> pd.DataFrame:
+    """Cached monthly contribution aggregation."""
+    df_time = df[df["Start Date"].notna()]
+    if len(df_time) == 0:
+        return pd.DataFrame()
+
+    df_time = df_time.copy()
+    df_time["Month"] = df_time["Start Date"].dt.to_period('M').astype(str)
+    monthly = (
+        df_time.groupby("Month")
+        .agg({"Amount": "sum", "Contributor Name": "count"})
+        .reset_index()
+    )
+    monthly.columns = ["Month", "Total Amount", "Number of Contributions"]
+    return monthly
+
+
+@st.cache_data(show_spinner=False)
+def get_top_contributors(_df_hash: int, df: pd.DataFrame, top_n: int = 20) -> pd.DataFrame:
+    """Cached top contributors aggregation."""
+    grouped = df.groupby("Contributor Name")["Amount"].sum().reset_index()
+    result = grouped.nlargest(top_n, "Amount")
+    result.columns = ["Contributor", "Total Amount"]
+    return result
+
+
+@st.cache_data(show_spinner=False)
+def get_occupation_stats(_df_hash: int, df: pd.DataFrame, top_n: int = 15) -> pd.DataFrame:
+    """Cached occupation statistics with nlargest."""
+    df_occ = df[df["Contributor Occupation"].notna()]
+    if len(df_occ) == 0:
+        return pd.DataFrame()
+
+    grouped = (
+        df_occ.groupby("Contributor Occupation")
+        .agg({"Amount": "sum", "Contributor Name": "nunique"})
+        .reset_index()
+    )
+    result = grouped.nlargest(top_n, "Amount")
+    result.columns = ["Occupation", "Total Amount", "Unique Donors"]
+    return result
+
+
+@st.cache_data(show_spinner=False)
+def get_ca_city_stats(_df_hash: int, df: pd.DataFrame, top_n: int = 50) -> pd.DataFrame:
+    """Cached California city statistics."""
+    ca_data = df[df["Contributor State"] == "CA"]
+    if len(ca_data) == 0:
+        return pd.DataFrame()
+
+    grouped = (
+        ca_data.groupby("Contributor City")
+        .agg({"Amount": "sum", "Contributor Name": "nunique"})
+        .reset_index()
+    )
+    return grouped.nlargest(top_n, "Amount")
+
+
+def get_df_hash(df: pd.DataFrame) -> int:
+    """Generate a hash for DataFrame caching."""
+    if len(df) < 10000:
+        return hash(tuple(df.index.tolist()))
+    return hash((len(df), df["Amount"].sum() if "Amount" in df.columns else 0))
+
+
+# =============================================================================
 # COLUMN MAPPING
 # =============================================================================
 
@@ -341,7 +487,8 @@ def create_downloadable_chart(
 # SMART INSIGHTS
 # =============================================================================
 
-def generate_smart_insights(df: pd.DataFrame, single_committee_mode: bool = False) -> list[dict]:
+@st.cache_data(show_spinner=False)
+def generate_smart_insights(_df_hash: int, df: pd.DataFrame, single_committee_mode: bool = False) -> list[dict]:
     """Generate smart insights and alerts from the data."""
     insights = []
 
@@ -550,6 +697,13 @@ if uploaded_file is not None:
     csv_path = _persist_uploaded_file(uploaded_file)
 elif manual_path.strip():
     csv_path = Path(manual_path).expanduser()
+else:
+    # Check if we have a previously uploaded file in session state
+    metadata = st.session_state.get("uploaded_file_meta")
+    if metadata and metadata.get("path"):
+        saved_path = Path(metadata["path"])
+        if saved_path.exists():
+            csv_path = saved_path
 
 if csv_path is None:
     st.info("Upload a CSV file or enter a path to begin analysis")
@@ -578,7 +732,7 @@ if "last_columns" not in st.session_state or st.session_state.last_columns != cu
 
 mapping = st.session_state.column_mapping
 
-with st.expander("Configure Column Mapping", expanded=True):
+with st.expander("Configure Column Mapping", expanded=False):
     st.caption(f"Your CSV has {len(df_raw.columns)} columns. Map them to the expected fields below.")
 
     col1, col2 = st.columns([1, 1])
@@ -670,35 +824,13 @@ with st.sidebar:
     if "Recipient Committee" in df_full.columns:
         committees = sorted(df_full["Recipient Committee"].dropna().unique().tolist())
 
-        with st.expander("Select Committee(s)", expanded=True):
-            st.caption(f"{len(committees)} committees available")
-
-            if "committee_selections" not in st.session_state:
-                st.session_state.committee_selections = {c: True for c in committees}
-
-            for committee in committees:
-                if committee not in st.session_state.committee_selections:
-                    st.session_state.committee_selections[committee] = True
-
-            col1, col2 = st.columns(2)
-            if col1.button("Select All", key="select_all_committees"):
-                for c in committees:
-                    st.session_state.committee_selections[c] = True
-                st.rerun()
-            if col2.button("Deselect All", key="deselect_all_committees"):
-                for c in committees:
-                    st.session_state.committee_selections[c] = False
-                st.rerun()
-
-            for committee in committees:
-                checked = st.checkbox(
-                    committee,
-                    value=st.session_state.committee_selections.get(committee, True),
-                    key=f"committee_checkbox_{committee}"
-                )
-                st.session_state.committee_selections[committee] = checked
-                if checked:
-                    selected_committees.append(committee)
+        selected_committees = st.multiselect(
+            "Select Committee(s)",
+            options=committees,
+            default=committees,
+            help=f"{len(committees)} committees available. Type to search.",
+            key="committee_filter"
+        )
 
     # Date range filter
     date_min, date_max = None, None
@@ -780,7 +912,14 @@ if selected_states and "Contributor State" in df_full.columns:
     mask &= df_full["Contributor State"].isin(selected_states)
     active_filters.append(f"States: {', '.join(selected_states)}")
 
-df = df_full[mask].copy()
+df = df_full[mask]
+
+# Clear PDF chart storage to prevent memory leak
+if "pdf_charts" in st.session_state:
+    st.session_state.pdf_charts = {}
+
+# Compute hash for caching
+df_hash = get_df_hash(df)
 
 filter_context = get_filter_context(
     selected_committees, date_min, date_max,
@@ -833,7 +972,8 @@ single_committee_mode = len(selected_committees) == 1
 if not single_committee_mode and len(selected_committees) > 1:
     st.info("Select a single committee to see detailed insights (large donations, momentum trends, top donors)")
 
-insights = generate_smart_insights(df, single_committee_mode=single_committee_mode)
+with st.spinner("Analyzing data for insights..."):
+    insights = generate_smart_insights(df_hash, df, single_committee_mode=single_committee_mode)
 
 if insights:
     insight_display = {
@@ -854,20 +994,12 @@ elif single_committee_mode:
 # =============================================================================
 
 if len(selected_committees) >= 2 and "Recipient Committee" in df.columns:
-    with st.expander("Committee Comparison", expanded=True):
+    with st.expander("Committee Comparison", expanded=False):
         st.subheader("Side-by-Side Committee Analysis")
 
-        # Compute comparison stats using groupby
+        # Compute comparison stats using cached function
         if "Amount" in df.columns:
-            comparison_stats = (
-                df.groupby("Recipient Committee")
-                .agg({
-                    "Amount": ["sum", "count", "mean"],
-                    "Contributor Name": "nunique"
-                })
-            )
-            comparison_stats.columns = ["Total $", "# Contributions", "Avg $", "# Donors"]
-            comparison_stats = comparison_stats.reset_index()
+            comparison_stats = get_comparison_stats(df_hash, df)
 
             st.dataframe(
                 comparison_stats.style.format({
@@ -922,12 +1054,9 @@ if len(selected_committees) >= 2 and "Recipient Committee" in df.columns:
 if not selected_committees and "Recipient Committee" in df.columns and "Amount" in df.columns:
     st.header("Contributions by Committee")
 
-    committee_stats = (
-        df.groupby("Recipient Committee")
-        .agg({"Amount": ["sum", "count", "mean"]})
-    )
+    committee_stats = get_committee_stats(df_hash, df)
     committee_stats.columns = ["Total Amount", "Number of Contributions", "Average Amount"]
-    committee_stats = committee_stats.sort_values("Total Amount", ascending=False).head(15).reset_index()
+    committee_stats = committee_stats.nlargest(15, "Total Amount").reset_index()
 
     col1, col2 = st.columns([2, 1])
 
@@ -1012,21 +1141,16 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
     # US Map
     st.subheader("United States Contribution Map (by City)")
 
-    city_state_data = (
-        df.groupby(["Contributor City", "Contributor State"])
-        .agg({"Amount": "sum", "Contributor Name": "nunique"})
-        .reset_index()
-        .sort_values("Amount", ascending=False)
-        .head(100)
-    )
+    # Use cached aggregation
+    city_state_data = get_city_state_stats(df_hash, df, top_n=100)
 
-    # Add coordinates
-    coords_list = [
-        get_city_coords(row["Contributor City"], row["Contributor State"])
-        for _, row in city_state_data.iterrows()
-    ]
-    city_state_data["coords"] = coords_list
-    city_state_data = city_state_data[city_state_data["coords"].notna()].copy()
+    # Add coordinates using vectorized apply instead of iterrows
+    city_coords_cache = load_city_coordinates()
+    city_state_data["coords"] = city_state_data.apply(
+        lambda row: city_coords_cache.get(f"{row['Contributor City']}, {row['Contributor State']}"),
+        axis=1
+    )
+    city_state_data = city_state_data[city_state_data["coords"].notna()]
 
     if len(city_state_data) > 0:
         city_state_data[["lat", "lon"]] = pd.DataFrame(
@@ -1057,22 +1181,16 @@ if "Contributor City" in df.columns and "Contributor State" in df.columns and "A
     else:
         st.warning("No city data with known coordinates found for mapping")
 
-    # California Map
-    ca_data = df[df["Contributor State"] == "CA"]
-    if len(ca_data) > 0:
+    # California Map - use cached aggregation
+    ca_city_data = get_ca_city_stats(df_hash, df, top_n=50)
+    if len(ca_city_data) > 0:
         st.subheader("California Contribution Map (by City)")
 
-        ca_city_data = (
-            ca_data.groupby("Contributor City")
-            .agg({"Amount": "sum", "Contributor Name": "nunique"})
-            .reset_index()
-            .sort_values("Amount", ascending=False)
-            .head(50)
+        # Add coordinates using vectorized approach
+        ca_city_data["coords"] = ca_city_data["Contributor City"].apply(
+            lambda city: city_coords_cache.get(f"{city}, CA")
         )
-
-        ca_coords = [get_city_coords(city, "CA") for city in ca_city_data["Contributor City"]]
-        ca_city_data["coords"] = ca_coords
-        ca_city_data = ca_city_data[ca_city_data["coords"].notna()].copy()
+        ca_city_data = ca_city_data[ca_city_data["coords"].notna()]
 
         if len(ca_city_data) > 0:
             ca_city_data[["lat", "lon"]] = pd.DataFrame(
@@ -1127,14 +1245,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("Top 15 Cities")
     if "Contributor City" in df.columns and "Amount" in df.columns:
-        city_stats = (
-            df.groupby("Contributor City")
-            .agg({"Amount": "sum", "Contributor Name": "nunique"})
-            .sort_values("Amount", ascending=False)
-            .head(15)
-            .reset_index()
-        )
-        city_stats.columns = ["City", "Total Amount", "Unique Donors"]
+        city_stats = get_city_stats(df_hash, df, top_n=15)
 
         fig = px.bar(
             city_stats,
@@ -1150,14 +1261,7 @@ with col1:
 with col2:
     st.subheader("Top 15 States")
     if "Contributor State" in df.columns and "Amount" in df.columns:
-        state_stats = (
-            df.groupby("Contributor State")
-            .agg({"Amount": "sum", "Contributor Name": "nunique"})
-            .sort_values("Amount", ascending=False)
-            .head(15)
-            .reset_index()
-        )
-        state_stats.columns = ["State", "Total Amount", "Unique Donors"]
+        state_stats = get_state_stats(df_hash, df, top_n=15)
 
         fig = px.bar(
             state_stats,
@@ -1178,16 +1282,9 @@ with col2:
 st.header("Contributions Over Time")
 
 if "Start Date" in df.columns and "Amount" in df.columns:
-    df_time = df[df["Start Date"].notna()]
+    daily_contributions = get_daily_contributions(df_hash, df)
 
-    if len(df_time) > 0:
-        daily_contributions = (
-            df_time.groupby(df_time["Start Date"].dt.date)
-            .agg({"Amount": "sum", "Contributor Name": "count"})
-            .reset_index()
-        )
-        daily_contributions.columns = ["Date", "Total Amount", "Number of Contributions"]
-
+    if len(daily_contributions) > 0:
         col1, col2 = st.columns(2)
 
         with col1:
@@ -1212,15 +1309,8 @@ if "Start Date" in df.columns and "Amount" in df.columns:
             fig.update_traces(line_color='#ff7f0e', line_width=2)
             create_downloadable_chart(fig, "daily_counts", filter_context, "daily_counts")
 
-        # Monthly aggregation
-        df_time_copy = df_time.copy()
-        df_time_copy["Month"] = df_time_copy["Start Date"].dt.to_period('M').astype(str)
-        monthly_contributions = (
-            df_time_copy.groupby("Month")
-            .agg({"Amount": "sum", "Contributor Name": "count"})
-            .reset_index()
-        )
-        monthly_contributions.columns = ["Month", "Total Amount", "Number of Contributions"]
+        # Monthly aggregation - use cached function
+        monthly_contributions = get_monthly_contributions(df_hash, df)
 
         fig = go.Figure()
         fig.add_trace(go.Bar(
@@ -1262,14 +1352,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("Top 20 Contributors")
     if "Contributor Name" in df.columns and "Amount" in df.columns:
-        top_contributors = (
-            df.groupby("Contributor Name")["Amount"]
-            .sum()
-            .sort_values(ascending=False)
-            .head(20)
-            .reset_index()
-        )
-        top_contributors.columns = ["Contributor", "Total Amount"]
+        top_contributors = get_top_contributors(df_hash, df, top_n=20)
 
         st.dataframe(
             top_contributors.style.format({"Total Amount": "${:,.2f}"}),
@@ -1280,26 +1363,20 @@ with col1:
 with col2:
     st.subheader("Top 15 Occupations")
     if "Contributor Occupation" in df.columns and "Amount" in df.columns:
-        # Filter out NaN occupations
-        df_occ = df[df["Contributor Occupation"].notna()]
-        occupation_stats = (
-            df_occ.groupby("Contributor Occupation")
-            .agg({"Amount": "sum", "Contributor Name": "nunique"})
-            .sort_values("Amount", ascending=False)
-            .head(15)
-            .reset_index()
-        )
-        occupation_stats.columns = ["Occupation", "Total Amount", "Unique Donors"]
+        occupation_stats = get_occupation_stats(df_hash, df, top_n=15)
 
-        fig = px.bar(
-            occupation_stats,
-            x="Total Amount",
-            y="Occupation",
-            orientation="h",
-            title="Top 15 Occupations by Contribution Amount"
-        )
-        fig.update_layout(height=400)
-        create_downloadable_chart(fig, "top_occupations", filter_context, "occupations")
+        if len(occupation_stats) > 0:
+            fig = px.bar(
+                occupation_stats,
+                x="Total Amount",
+                y="Occupation",
+                orientation="h",
+                title="Top 15 Occupations by Contribution Amount"
+            )
+            fig.update_layout(height=400)
+            create_downloadable_chart(fig, "top_occupations", filter_context, "occupations")
+        else:
+            st.info("No occupation data available")
 
 
 # =============================================================================
